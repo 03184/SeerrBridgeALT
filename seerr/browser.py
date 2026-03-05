@@ -16,7 +16,13 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager, ChromeType
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import StaleElementReferenceException, NoSuchElementException, TimeoutException, ElementClickInterceptedException
+from selenium.common.exceptions import (
+    StaleElementReferenceException,
+    NoSuchElementException,
+    TimeoutException,
+    ElementClickInterceptedException,
+    SessionNotCreatedException,
+)
 from fuzzywuzzy import fuzz
 from seerr.config import (
     HEADLESS_MODE,
@@ -182,15 +188,27 @@ async def initialize_browser():
                 if chrome_driver_path and os.path.exists(chrome_driver_path):
                     logger.info(f"Using Chrome driver from Chrome for Testing: {chrome_driver_path}")
           
+            driver = None
             if chrome_driver_path and os.path.exists(chrome_driver_path):
-                driver = webdriver.Chrome(service=Service(chrome_driver_path), options=options)
-            else:
-                # Fallback to WebDriver Manager if download fails
-                logger.warning("Failed to get Chrome driver from Chrome for Testing. Falling back to appropriate driver.")
-                if current_arch in ['aarch64', 'arm64']:
-                    driver = webdriver.Chrome(service=Service("/usr/bin/chromedriver"), options=options)
-                else:
-                    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+                try:
+                    driver = webdriver.Chrome(service=Service(chrome_driver_path), options=options)
+                except SessionNotCreatedException as e:
+                    if "This version of ChromeDriver only supports Chrome version" in str(e):
+                        logger.warning(
+                            "ChromeDriver version mismatch (installed Chrome may be behind latest). "
+                            "Retrying with WebDriver Manager to match your Chrome version."
+                        )
+                        driver = None
+                    else:
+                        raise
+            if driver is None and current_arch not in ['aarch64', 'arm64']:
+                # Fallback: WebDriver Manager detects installed Chrome and downloads matching driver
+                logger.warning(
+                    "Using WebDriver Manager to install ChromeDriver matching your installed Chrome version."
+                )
+                driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+            elif driver is None and current_arch in ['aarch64', 'arm64']:
+                driver = webdriver.Chrome(service=Service("/usr/bin/chromedriver"), options=options)
             # Suppress 'webdriver' detection
             driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
                 "source": """
@@ -206,7 +224,7 @@ async def initialize_browser():
         except Exception as e:
             logger.error(f"Failed to initialize Selenium WebDriver: {e}")
             logger.warning("Browser automation will be disabled. The application will continue without browser functionality.")
-            driver = None # Ensure driver is None on failure
+            driver = None  # Ensure driver is None on failure
             return None  # Return None instead of raising the exception
         # If initialization succeeded, continue with setup
         if driver:
