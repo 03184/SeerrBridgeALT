@@ -1663,10 +1663,123 @@ def subscribe_to_existing_show(tmdb_id: int, mark_existing_completed: bool = Tru
         if 'db' in locals():
             db.close()
 
+def refresh_tv_show_air_dates_from_trakt(media_id: int) -> bool:
+    """
+    For a TV show, fetch all seasons/episodes from Trakt and update aired_episodes
+    and unprocessed_episodes from first_aired dates (episodes that have aired on or
+    before today). Use when the DB is out of date (e.g. still "not_aired" after
+    episodes have aired). Does not add to queue; caller may do that after.
+    """
+    try:
+        from seerr.trakt import get_all_seasons_from_trakt
+
+        db = get_db()
+        media = db.query(UnifiedMedia).filter(UnifiedMedia.id == media_id).first()
+        if not media or media.media_type != 'tv':
+            return False
+        trakt_id = media.trakt_id
+        if not trakt_id and media.tmdb_id:
+            from seerr.trakt import get_media_details_from_trakt
+            details = get_media_details_from_trakt(str(media.tmdb_id), 'tv')
+            if details and details.get('trakt_id'):
+                trakt_id = str(details.get('trakt_id'))
+                update_media_details(media_id, trakt_id=trakt_id)
+        if not trakt_id:
+            log_warning("Trakt Refresh", f"No trakt_id for TV show {media.title} (ID {media_id})")
+            return False
+
+        def _parse_first_aired(episode: dict):
+            fa = episode.get('first_aired')
+            if not fa:
+                return None
+            try:
+                if isinstance(fa, str):
+                    return datetime.fromisoformat(fa.replace('Z', '+00:00'))
+                if hasattr(fa, 'date'):
+                    return fa
+                return None
+            except Exception:
+                return None
+
+        all_seasons_trakt = get_all_seasons_from_trakt(str(trakt_id))
+        if not all_seasons_trakt:
+            log_warning("Trakt Refresh", f"Failed to fetch Trakt seasons for {media.title}")
+            return False
+
+        today_utc = datetime.now(timezone.utc).date()
+        existing_seasons_data = [dict(s) for s in (media.seasons_data or []) if isinstance(s, dict)]
+        existing_by_season = {s.get('season_number'): s for s in existing_seasons_data if s.get('season_number') is not None}
+
+        for trakt_season in all_seasons_trakt:
+            season_number = int(trakt_season.get('number', 0) or 0)
+            if season_number <= 0:
+                continue
+            episodes = trakt_season.get('episodes', []) or []
+            episode_count = len(episodes)
+            aired_count = 0
+            for ep in episodes:
+                fa = _parse_first_aired(ep)
+                if fa is None:
+                    continue
+                d = fa.date() if hasattr(fa, 'date') else fa
+                if d <= today_utc:
+                    aired_count += 1
+
+            unprocessed_base = [f"E{str(i).zfill(2)}" for i in range(1, aired_count + 1)] if aired_count > 0 else []
+            now_iso = datetime.utcnow().isoformat()
+
+            if season_number in existing_by_season:
+                ex = existing_by_season[season_number]
+                confirmed = set(ex.get('confirmed_episodes', []) or [])
+                failed = set(ex.get('failed_episodes', []) or [])
+                unprocessed = [e for e in unprocessed_base if e not in confirmed and e not in failed]
+                ex['episode_count'] = episode_count
+                ex['aired_episodes'] = aired_count
+                ex_unprocessed = set(ex.get('unprocessed_episodes', []) or [])
+                for e in unprocessed:
+                    ex_unprocessed.add(e)
+                ex['unprocessed_episodes'] = sorted(list(ex_unprocessed))
+                ex['last_checked'] = now_iso
+                ex['updated_at'] = now_iso
+                ex['status'] = 'processing' if unprocessed or (aired_count < episode_count) else ('completed' if aired_count >= episode_count else 'pending')
+                if unprocessed or (aired_count < episode_count):
+                    ex['is_complete'] = False
+            else:
+                new_season = EnhancedSeasonManager.create_enhanced_season_data(
+                    season_number=season_number,
+                    episode_count=episode_count,
+                    aired_episodes=aired_count,
+                    confirmed_episodes=[],
+                    failed_episodes=[],
+                    unprocessed_episodes=unprocessed_base,
+                    is_discrepant=False
+                )
+                new_season['status'] = 'processing' if unprocessed_base or (aired_count < episode_count) else ('pending' if aired_count < episode_count else 'completed')
+                new_season['last_checked'] = now_iso
+                new_season['updated_at'] = now_iso
+                existing_seasons_data.append(new_season)
+                existing_by_season[season_number] = new_season
+
+        existing_seasons_data.sort(key=lambda x: x.get('season_number', 0))
+        update_media_details(media_id, seasons_data=existing_seasons_data, last_checked_at=datetime.utcnow())
+        recompute_tv_show_status(media_id)
+        log_success("Trakt Refresh", f"Refreshed TV air dates for {media.title}")
+        return True
+    except Exception as e:
+        log_error("Trakt Refresh", f"Error refreshing TV air dates: {e}")
+        if 'db' in locals():
+            db.rollback()
+        return False
+    finally:
+        if 'db' in locals():
+            db.close()
+
+
 def refresh_media_from_trakt(media_id: int, force_image_refresh: bool = False) -> bool:
     """
     Refresh media metadata and images from Trakt API for existing media.
-    Does not change status or re-queue the item.
+    For TV, also refreshes season/episode air dates from Trakt (first_aired) so
+    unaired→aired transitions are reflected. Does not re-queue the item.
     
     Args:
         media_id (int): ID of the media record to refresh
@@ -1801,11 +1914,16 @@ def refresh_media_from_trakt(media_id: int, force_image_refresh: bool = False) -
         # Apply updates
         if update_data:
             update_media_details(media_id, **update_data)
+        # For TV, refresh season/episode air dates from Trakt so unaired→aired is reflected
+        if media.media_type == 'tv':
+            refresh_tv_show_air_dates_from_trakt(media_id)
+        if update_data:
             log_success("Trakt Refresh", f"Successfully refreshed Trakt data for {media.title}")
             return True
-        else:
-            log_warning("Trakt Refresh", f"No updates to apply for {media.title}")
-            return False
+        if media.media_type == 'tv':
+            return True  # TV air dates were refreshed
+        log_warning("Trakt Refresh", f"No updates to apply for {media.title}")
+        return False
         
     except Exception as e:
         log_error("Trakt Refresh", f"Error refreshing media from Trakt: {e}")

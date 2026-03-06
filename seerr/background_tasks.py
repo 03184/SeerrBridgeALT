@@ -2011,10 +2011,9 @@ async def populate_queues_from_unified_media():
                             
                             for season in seasons_data:
                                 season_number = season.get('season_number')
-                                season_status = season.get('status')
-                                
-                                # Only process seasons that are not completed and not "not_aired"
-                                if season_status not in ['completed', 'not_aired']:
+                                unprocessed_episodes = season.get('unprocessed_episodes') or []
+                                # Only queue seasons that have aired-but-unprocessed episodes (not 'pending' = unaired only)
+                                if isinstance(unprocessed_episodes, list) and len(unprocessed_episodes) > 0:
                                     seasons_need_processing.append(season_number)
                         
                         # Only add to queue if there are seasons that actually need processing
@@ -3197,25 +3196,14 @@ async def check_stuck_items_on_startup():
                                 aired_episodes = season.get('aired_episodes', 0)
                                 has_confirmed_episodes = len(confirmed_episodes) > 0
                                 
-                                # Only process seasons that are:
-                                # - Not completed and not "not_aired" AND
-                                # - Either has no confirmed episodes, OR has unprocessed episodes remaining
-                                if season_status not in ['completed', 'not_aired']:
-                                    if has_confirmed_episodes:
-                                        # Season has some episodes confirmed - check if there are unprocessed episodes
-                                        unprocessed_episodes = season.get('unprocessed_episodes', [])
-                                        if unprocessed_episodes and len(unprocessed_episodes) > 0:
-                                            seasons_need_processing.append(season_number)
-                                            logger.info(f"Startup Check: Season {season_number} has {len(confirmed_episodes)} confirmed but {len(unprocessed_episodes)} unprocessed episodes - needs processing")
-                                        else:
-                                            # All aired episodes are either confirmed or failed
-                                            logger.info(f"Startup Check: Season {season_number} has confirmed episodes but no unprocessed episodes - skipping")
-                                    else:
-                                        # No episodes confirmed yet - needs processing
-                                        seasons_need_processing.append(season_number)
-                                        logger.info(f"Startup Check: Season {season_number} needs processing (status: {season_status}, no confirmed episodes)")
+                                # Only queue seasons that have aired-but-unprocessed episodes (do not queue 'pending' = unaired only)
+                                unprocessed_episodes = season.get('unprocessed_episodes', []) or []
+                                has_unprocessed = isinstance(unprocessed_episodes, list) and len(unprocessed_episodes) > 0
+                                if has_unprocessed:
+                                    seasons_need_processing.append(season_number)
+                                    logger.info(f"Startup Check: Season {season_number} has {len(unprocessed_episodes)} unprocessed episodes - needs processing")
                                 else:
-                                    logger.info(f"Startup Check: Season {season_number} is {season_status}, skipping")
+                                    logger.info(f"Startup Check: Season {season_number} is {season_status or 'pending'} (no unprocessed episodes), skipping")
                         
                         # Only re-queue if there are seasons that actually need processing
                         if seasons_need_processing:
@@ -3394,7 +3382,8 @@ async def check_show_subscriptions(add_to_queue: bool = True):
                         ex['unprocessed_episodes'] = list(set(ex.get('unprocessed_episodes', []) + unprocessed))
                         ex['last_checked'] = now_iso
                         ex['updated_at'] = now_iso
-                        ex['status'] = 'processing' if unprocessed or (aired_on_or_after_anchor < episode_count) else 'completed'
+                        # Processing only when there are aired-but-unprocessed episodes; unaired-only -> pending
+                        ex['status'] = 'processing' if unprocessed else ('pending' if (aired_on_or_after_anchor < episode_count) else 'completed')
                         break
             else:
                 new_season = EnhancedSeasonManager.create_enhanced_season_data(
@@ -3406,7 +3395,8 @@ async def check_show_subscriptions(add_to_queue: bool = True):
                     unprocessed_episodes=unprocessed,
                     is_discrepant=False
                 )
-                new_season['status'] = 'processing' if unprocessed or (aired_on_or_after_anchor < episode_count) else 'pending'
+                # Processing only when there are aired-but-unprocessed episodes; unaired-only -> pending
+                new_season['status'] = 'processing' if unprocessed else 'pending'
                 existing_seasons_data.append(new_season)
                 existing_season_numbers.add(season_number)
 

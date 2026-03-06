@@ -2131,9 +2131,12 @@ def is_season_completed(movie_title, season_num, tmdb_id=None):
             for season_data in media_record.seasons_data:
                 if (isinstance(season_data, dict) and 
                     season_data.get('season_number') == season_num):
+                    unprocessed = season_data.get('unprocessed_episodes', []) or []
+                    if isinstance(unprocessed, list) and len(unprocessed) > 0:
+                        logger.info(f"Season {season_num} is not completed ({len(unprocessed)} unprocessed episode(s))")
+                        return False
                     season_status = season_data.get('status', 'unknown')
                     is_complete = season_data.get('is_complete', False)
-                    
                     if season_status == 'completed' or is_complete:
                         logger.info(f"Season {season_num} is completed (status: {season_status}, is_complete: {is_complete})")
                         return True
