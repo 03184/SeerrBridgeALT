@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "nuxt build",
-    "dev": "nuxt dev --port 3777 --host 0.0.0.0",
+    "dev": "cross-env NUXT_SOCKET=0 nuxt dev --port 3777 --host 0.0.0.0",
     "dev:docker": "nuxt dev --port 3777 --host 0.0.0.0",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
@@ -43,8 +43,10 @@
     "vue-router": "^4.4.0"
   },
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "@iconify-json/heroicons": "^1.2.3",
     "@iconify-json/lucide": "^1.2.69",
+    "@iconify-json/mdi": "^1.2.3",
     "@nuxt/eslint-config": "^0.5.0",
     "@types/node": "^20.11.0",
     "autoprefixer": "^10.4.17",
