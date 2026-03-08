@@ -1632,11 +1632,48 @@ def subscribe_to_existing_show(tmdb_id: int, mark_existing_completed: bool = Tru
         db.add(new_media)
         db.commit()
         
-        # Store images
+        # Store images (correct arg order: media_title, tmdb_id, media_type, trakt_id)
+        image_data = None
         try:
-            store_media_images(tmdb_id, 'tv', trakt_id)
+            image_data = store_media_images(title, tmdb_id, 'tv', str(trakt_id))
         except Exception as e:
             log_warning("TV Subscription", f"Failed to store images for {title}: {e}")
+        if image_data:
+            update_data = {}
+            if 'poster_url' in image_data:
+                update_data['poster_url'] = image_data['poster_url']
+            if 'poster_image' in image_data:
+                update_data['poster_image'] = image_data['poster_image']
+            if 'poster_image_format' in image_data:
+                update_data['poster_image_format'] = image_data['poster_image_format']
+            if 'poster_image_size' in image_data:
+                update_data['poster_image_size'] = image_data['poster_image_size']
+            if 'thumb_url' in image_data:
+                update_data['thumb_url'] = image_data['thumb_url']
+            if 'thumb_image' in image_data:
+                update_data['thumb_image'] = image_data['thumb_image']
+            if 'thumb_image_format' in image_data:
+                update_data['thumb_image_format'] = image_data['thumb_image_format']
+            if 'thumb_image_size' in image_data:
+                update_data['thumb_image_size'] = image_data['thumb_image_size']
+            if 'fanart_url' in image_data:
+                update_data['fanart_url'] = image_data['fanart_url']
+            if 'fanart_image' in image_data:
+                update_data['fanart_image'] = image_data['fanart_image']
+            if 'fanart_image_format' in image_data:
+                update_data['fanart_image_format'] = image_data['fanart_image_format']
+            if 'fanart_image_size' in image_data:
+                update_data['fanart_image_size'] = image_data['fanart_image_size']
+            if 'backdrop_url' in image_data:
+                update_data['backdrop_url'] = image_data['backdrop_url']
+            if 'backdrop_image' in image_data:
+                update_data['backdrop_image'] = image_data['backdrop_image']
+            if 'backdrop_image_format' in image_data:
+                update_data['backdrop_image_format'] = image_data['backdrop_image_format']
+            if 'backdrop_image_size' in image_data:
+                update_data['backdrop_image_size'] = image_data['backdrop_image_size']
+            if update_data:
+                update_media_details(new_media.id, **update_data)
         
         log_info("TV Subscription", f"Created subscription for {title} with {len(seasons_data)} seasons (forward-only from subscribe date)")
         
