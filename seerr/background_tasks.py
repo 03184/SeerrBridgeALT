@@ -212,10 +212,10 @@ async def check_config_changes():
                         module="background_tasks", function="check_config_changes")
             
             # 6. Check subscription check - only if enable_show_subscription_task is True
-            # Subscription checks are now part of daily_3am_tv_maintenance (cron @ 3am).
-            if 'daily_3am_tv_maintenance' not in current_jobs:
+            # Subscription checks are now part of daily_3am_maintenance (cron @ 3am: movie recheck → TV maintenance).
+            if 'daily_3am_maintenance' not in current_jobs:
                 should_refresh = True
-                log_info("Config Refresh", "Daily TV maintenance job missing, will refresh",
+                log_info("Config Refresh", "Daily 3am maintenance job missing, will refresh",
                         module="background_tasks", function="check_config_changes")
         
         if should_refresh:
@@ -244,32 +244,19 @@ async def refresh_all_scheduled_tasks():
     # Schedule token refresh
     schedule_token_refresh()
     
-    # Movie maintenance (unreleased, failed, stuck) is handled by daily_3am_movie_recheck only; no interval job.
-    # Queue population (Overseerr + unified_media) runs only at startup (once) and at 3am; no interval job.
+    # Movie maintenance (unreleased, failed, stuck) and TV maintenance run in one 3am job: movie recheck then TV maintenance, then queue processing runs (movies then TV).
+    # Queue population (Overseerr + unified_media) runs only at startup (once) and at 3am via this job.
     
-    # Schedule daily 3am movie recheck: unreleased→pending+queue, failed movies→queue (only path that re-queues failed movies)
     scheduler.add_job(
-        daily_3am_movie_recheck,
+        daily_3am_maintenance,
         'cron',
         hour=3,
         minute=0,
-        id='daily_3am_movie_recheck',
+        id='daily_3am_maintenance',
         replace_existing=True,
         max_instances=1
     )
-    log_info("Scheduler", "Scheduled daily 3am movie recheck (unreleased, failed, stuck)", module="background_tasks", function="refresh_all_scheduled_tasks")
-
-    # Schedule daily 3am TV maintenance: unaired→processing, failed episode retries, subscriptions
-    scheduler.add_job(
-        daily_3am_tv_maintenance,
-        'cron',
-        hour=3,
-        minute=0,
-        id='daily_3am_tv_maintenance',
-        replace_existing=True,
-        max_instances=1
-    )
-    log_info("Scheduler", "Scheduled daily 3am TV maintenance (unaired, failed, subscriptions)", module="background_tasks", function="refresh_all_scheduled_tasks")
+    log_info("Scheduler", "Scheduled daily 3am maintenance (movie recheck → TV maintenance → queue processing)", module="background_tasks", function="refresh_all_scheduled_tasks")
     
     # Schedule failed item processing
     schedule_failed_item_processing()
@@ -420,6 +407,18 @@ async def add_failed_item_processing_to_queue():
         log_info("Failed Item Processing", "Added failed item processing task to queue", module="background_tasks", function="add_failed_item_processing_to_queue")
     except Exception as e:
         log_error("Failed Item Processing", f"Error adding failed item processing to queue: {e}", module="background_tasks", function="add_failed_item_processing_to_queue")
+
+
+async def daily_3am_maintenance():
+    """
+    Single 3am job: wait for queue idle, then movie recheck, then TV maintenance.
+    Queue processing then runs in order (movies, then TV) without competing.
+    """
+    if not USE_DATABASE:
+        return
+    await queue_processing_complete.wait()
+    await daily_3am_movie_recheck()
+    await daily_3am_tv_maintenance()
 
 
 async def daily_3am_movie_recheck():
