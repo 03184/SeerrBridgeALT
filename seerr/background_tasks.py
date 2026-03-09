@@ -2623,7 +2623,6 @@ async def populate_queues_from_overseerr(only_new_requests: bool = False):
 
         # Check if media is unreleased BEFORE queuing (for movies)
         if media_type == 'movie' and movie_details.get('released_date'):
-            from datetime import datetime, timezone
             current_time = datetime.now(timezone.utc)
             released_date = movie_details['released_date']
             
