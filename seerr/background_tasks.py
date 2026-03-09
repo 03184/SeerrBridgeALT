@@ -696,7 +696,10 @@ async def daily_3am_tv_maintenance():
                     log_error("Daily TV Maintenance", f"Error retrying failed show {getattr(show, 'title', '')}: {e}", module="background_tasks", function="daily_3am_tv_maintenance")
                     continue
 
-            # Reconcile: fix show status from season data (completed/pending -> processing/failed when any season has unprocessed or failed)
+            # Reconcile: ensure show status and processing_stage match season data (unprocessed/failed).
+            # Always recompute when any season has unprocessed or failed episodes so that:
+            # - failed + unprocessed_episodes -> processing + episodes_pending (queue population can pick up)
+            # - processing + stale processing_stage -> correct episodes_pending
             reconciled_count = 0
             all_tv = db.query(UnifiedMedia).filter(
                 UnifiedMedia.media_type == 'tv',
@@ -722,9 +725,8 @@ async def daily_3am_tv_maintenance():
                             break
                     if not has_work:
                         continue
-                    if show.status not in ('processing', 'failed'):
-                        recompute_tv_show_status(show.id)
-                        reconciled_count += 1
+                    recompute_tv_show_status(show.id)
+                    reconciled_count += 1
                 except Exception as e:
                     log_error("Daily TV Maintenance", f"Error reconciling show {getattr(show, 'title', '')}: {e}", module="background_tasks", function="daily_3am_tv_maintenance")
                     continue
