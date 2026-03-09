@@ -224,6 +224,29 @@ def clean_title(title, target_lang='en'):
     # Convert to lowercase for comparison
     return cleaned_title.lower()
 
+
+def normalize_title_for_library_search(title, episode_id=None):
+    """
+    Normalize a title for DMM library search: no punctuation, single spaces, lowercase.
+    For TV: pass episode_id (e.g. S02E05) to get "title S02E05". For movie: omit episode_id.
+
+    Examples:
+      "Star Trek: Starfleet Academy (2024)", "S02E05" -> "star trek starfleet academy S02E05"
+      "Perrier's Bounty" -> "perriers bounty"
+    """
+    if not title or not isinstance(title, str):
+        return (episode_id or "").strip() or ""
+    # Strip parenthetical year at end, e.g. (2024) or (2024-2025)
+    t = re.sub(r'\s*\(\d{4}(?:-\d{4})?\)\s*$', '', title.strip())
+    # Replace punctuation with space, then collapse spaces
+    t = re.sub(r"[,:;.'\-–—]", ' ', t)
+    t = re.sub(r'\s+', ' ', t).strip().lower()
+    if episode_id:
+        ep = str(episode_id).strip()
+        return f"{t} {ep}" if t else ep
+    return t
+
+
 def normalize_title(title, target_lang='en'):
     """
     Normalizes the title by ensuring there are no unnecessary spaces or dots,

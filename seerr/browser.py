@@ -937,6 +937,59 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
         logger.info("No red buttons with 'RD (100%)' detected. Proceeding with optional fallback.")
     return confirmation_flag, confirmed_seasons
 
+def check_torrent_in_dmm_library(driver, search_phrase, library_wait_sec=8):
+    """
+    Check whether a torrent appears in DMM library by searching for the given phrase (case-insensitive).
+    For TV use a phrase like "star trek starfleet academy S02E05" (normalized title + episode id).
+    For movie use normalized title only, e.g. "perriers bounty".
+    Navigates to library, optionally uses search input, then looks for the phrase in library content. Restores original URL.
+
+    Returns:
+        True if the phrase is found in the library, False otherwise or on error.
+    """
+    if driver is None:
+        return False
+    phrase = (search_phrase or "").strip() if isinstance(search_phrase, str) else str(search_phrase).strip()
+    if not phrase:
+        return False
+    original_url = driver.current_url
+    try:
+        driver.get("https://debridmediamanager.com/library")
+        try:
+            WebDriverWait(driver, library_wait_sec).until(
+                EC.presence_of_element_located((By.XPATH, "//div[@id='library-content']"))
+            )
+        except TimeoutException:
+            logger.warning("Library page did not load in time during library check.")
+            return False
+        time.sleep(2)
+        # Optional: if library has a search/filter input, use it to narrow results
+        try:
+            search_input = driver.find_element(By.CSS_SELECTOR, "input#query, input[placeholder*='earch' i], input[type='search']")
+            search_input.clear()
+            search_input.send_keys(phrase)
+            time.sleep(2)
+        except NoSuchElementException:
+            pass
+        # Look for the search phrase in library (case-insensitive)
+        try:
+            library_content = driver.find_element(By.ID, "library-content")
+            library_text = library_content.text or ""
+        except NoSuchElementException:
+            library_text = driver.find_element(By.TAG_NAME, "body").text or ""
+        found = phrase.lower() in library_text.lower()
+        return found
+    except Exception as e:
+        logger.warning(f"Library check failed: {e}")
+        return False
+    finally:
+        try:
+            driver.get(original_url)
+            time.sleep(1)
+        except Exception as e:
+            logger.warning(f"Failed to restore URL after library check: {e}")
+
+
 def refresh_library_stats():
     """
     Refresh library statistics from the current page

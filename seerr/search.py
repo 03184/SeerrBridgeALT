@@ -1606,9 +1606,10 @@ def process_individual_episodes_fallback(driver, movie_title, season_num, normal
                                     logger.info(f"Successfully processed {full_episode_id} in box {i}")
                                     episode_confirmed = True
                                     
-                                    # Verify RD status after processing
+                                    # Verify RD status after processing (25s default; DMM can be slow / report failure but add to library)
+                                    RD_STATUS_WAIT_SEC = int(os.environ.get("SEERR_RD_STATUS_WAIT_SEC", "25"))
                                     try:
-                                        rd_button = WebDriverWait(driver, 10).until(
+                                        rd_button = WebDriverWait(driver, RD_STATUS_WAIT_SEC).until(
                                             EC.presence_of_element_located((By.XPATH, ".//button[contains(text(), 'RD (')]"))
                                         )
                                         rd_button_text = rd_button.text
@@ -1623,7 +1624,18 @@ def process_individual_episodes_fallback(driver, movie_title, season_num, normal
                                             episode_confirmed = False
                                             continue
                                     except TimeoutException:
-                                        logger.warning(f"Timeout waiting for RD status for {full_episode_id}")
+                                        logger.warning(f"Timeout waiting for RD status for {full_episode_id}. Checking library in case DMM added it anyway.")
+                                        from seerr.browser import check_torrent_in_dmm_library
+                                        from seerr.utils import normalize_title_for_library_search
+                                        search_phrase = normalize_title_for_library_search(movie_title, full_episode_id)
+                                        if check_torrent_in_dmm_library(driver, search_phrase):
+                                            logger.success(f"RD status timed out but '{search_phrase}' found in library. Marking as complete.")
+                                            confirmation_flag = True
+                                            processed_torrents.add(title_text)
+                                            episode_confirmed = True
+                                            break
+                                        logger.warning(f"'{search_phrase}' not in library after timeout. Retrying with next result.")
+                                        episode_confirmed = False
                                         continue
                                 else:
                                     logger.warning(f"Failed to process buttons for {full_episode_id} in box {i}")
