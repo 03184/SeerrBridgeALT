@@ -2437,6 +2437,24 @@ def _check_queue_status(tmdb_id, media_type):
         # On error, continue processing (safer than stopping)
         return False
 
+
+def _library_search_phrase(movie_title, media_type, title_text=None):
+    """Build the phrase to search for in DMM library (movie: title only; TV: normalized title + episode id if in title_text)."""
+    from seerr.utils import normalize_title_for_library_search
+    if not movie_title:
+        return ""
+    if media_type == "movie":
+        return normalize_title_for_library_search(movie_title)
+    # TV: try to extract SxxExx from box title for show-specific match
+    episode_id = None
+    if title_text:
+        import re
+        m = re.search(r"[sS](\d{1,2})[eE](\d{1,2})", title_text)
+        if m:
+            episode_id = f"S{int(m.group(1)):02d}E{int(m.group(2)):02d}"
+    return normalize_title_for_library_search(movie_title, episode_id)
+
+
 def search_on_debrid(imdb_id, movie_title, media_type, driver, extra_data=None, tmdb_id=None):
     """
     Search for media on Debrid Media Manager
@@ -3972,7 +3990,14 @@ def search_on_debrid(imdb_id, movie_title, media_type, driver, extra_data=None, 
                                                     time.sleep(3)  # Wait 3 seconds before retry
                                                     continue
                                                 else:
-                                                    logger.warning(f"Button status did not change after {max_retries} attempts in box {i}. Moving to next box.")
+                                                    logger.warning(f"Button status did not change after {max_retries} attempts in box {i}. Checking library in case DMM added it anyway.")
+                                                    _search_phrase = _library_search_phrase(movie_title, media_type, title_text)
+                                                    if _search_phrase:
+                                                        from seerr.browser import check_torrent_in_dmm_library
+                                                        if check_torrent_in_dmm_library(driver, _search_phrase):
+                                                            logger.success(f"RD status did not update but '{_search_phrase}' found in library. Marking as complete.")
+                                                            return True
+                                                    logger.warning(f"Moving to next box.")
                                                     rd_status_confirmed = True
                                                     break
                                             
@@ -3986,7 +4011,14 @@ def search_on_debrid(imdb_id, movie_title, media_type, driver, extra_data=None, 
                                                 time.sleep(2)  # Wait 2 seconds before retry
                                                 continue
                                             else:
-                                                logger.warning(f"Timeout waiting for RD button status change in box {i} after {max_retries} attempts. Moving to next box.")
+                                                logger.warning(f"Timeout waiting for RD button status change in box {i} after {max_retries} attempts. Checking library in case DMM added it anyway.")
+                                                _search_phrase = _library_search_phrase(movie_title, media_type, title_text)
+                                                if _search_phrase:
+                                                    from seerr.browser import check_torrent_in_dmm_library
+                                                    if check_torrent_in_dmm_library(driver, _search_phrase):
+                                                        logger.success(f"RD status timed out but '{_search_phrase}' found in library. Marking as complete.")
+                                                        return True
+                                                logger.warning(f"Moving to next box.")
                                                 rd_status_confirmed = True
                                                 break
                                         except StaleElementReferenceException:
