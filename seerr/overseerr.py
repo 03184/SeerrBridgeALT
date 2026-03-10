@@ -343,13 +343,8 @@ def check_media_availability(tmdb_id: int, media_type: str) -> Optional[Dict[str
         media_type (str): 'movie' or 'tv'
         
     Returns:
-        Optional[Dict]: Media info with availability status if found, None otherwise
-        {
-            'available': bool,
-            'status': int,  # 1 or 5 = Available, 3 = Processing, etc.
-            'media_id': int,
-            'tmdb_id': int
-        }
+        Optional[Dict]: Media info with availability status if found, None otherwise.
+        'available' is True only when status == 5 (AVAILABLE).
     """
     # Access config dynamically to get current values
     base_url = config.OVERSEERR_API_BASE_URL
@@ -380,9 +375,9 @@ def check_media_availability(tmdb_id: int, media_type: str) -> Optional[Dict[str
         media_info = data.get('mediaInfo', {})
         status = media_info.get('status')
         
-        # Status values: 0=Unknown, 1=Available, 2=Partial, 3=Processing, 4=Partially Available, 5=Available
-        is_available = status == 1 or status == 5
-        
+        # Overseerr MediaStatus: 1=UNKNOWN, 2=PENDING, 3=PROCESSING, 4=PARTIALLY_AVAILABLE, 5=AVAILABLE, 6=DELETED. Only 5 = available.
+        is_available = status == 5
+
         return {
             'available': is_available,
             'status': status,
@@ -390,10 +385,76 @@ def check_media_availability(tmdb_id: int, media_type: str) -> Optional[Dict[str
             'tmdb_id': tmdb_id,
             'media_type': media_type
         }
-        
+
     except requests.exceptions.RequestException as e:
         logger.error(f"Error checking media availability for {tmdb_id}: {e}")
         return None
     except Exception as e:
         logger.error(f"Unexpected error checking media availability: {e}")
-        return None 
+        return None
+
+
+# Overseerr MediaStatus enum (server/constants/media.ts): only 5 = AVAILABLE
+MEDIA_STATUS_AVAILABLE = 5
+
+
+def check_tv_availability_by_season(tmdb_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Check TV show availability at the season level from Overseerr.
+    GET /api/v1/tv/{tmdb_id} returns mediaInfo.seasons[].seasonNumber and .status.
+    Only status 5 (AVAILABLE) means the season is available.
+
+    Returns:
+        Optional[Dict]: None if not found or error; otherwise:
+        {
+            'media_id': int,
+            'tmdb_id': int,
+            'status': int,
+            'seasons_available': [1, 2, 4],  # season numbers with status == 5
+        }
+    """
+    base_url = config.OVERSEERR_API_BASE_URL
+    api_key = config.OVERSEERR_API_KEY
+
+    if not base_url or not api_key:
+        logger.error("Overseerr configuration not set")
+        return None
+
+    url = f"{base_url}/api/v1/tv/{tmdb_id}"
+    headers = {"X-Api-Key": api_key}
+
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+
+        if response.status_code == 404:
+            return None
+
+        if response.status_code != 200:
+            logger.error(f"Failed to check TV availability: {response.status_code}")
+            return None
+
+        data = response.json()
+        media_info = data.get('mediaInfo', {})
+        if not media_info:
+            return None
+
+        seasons_available = []
+        for s in media_info.get('seasons') or []:
+            sn = s.get('seasonNumber')
+            st = s.get('status')
+            if sn is not None and st == MEDIA_STATUS_AVAILABLE:
+                seasons_available.append(int(sn))
+
+        return {
+            'media_id': media_info.get('id'),
+            'tmdb_id': tmdb_id,
+            'status': media_info.get('status'),
+            'seasons_available': sorted(seasons_available),
+        }
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error checking TV availability for {tmdb_id}: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error checking TV availability: {e}")
+        return None

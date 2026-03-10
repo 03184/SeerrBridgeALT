@@ -427,6 +427,18 @@ def parse_requested_seasons(extra_data):
 
     # Handle dictionary format (new format)
     if isinstance(extra_data, dict):
+        # List of season numbers (e.g. from queue population or startup requeue)
+        if 'requested_seasons' in extra_data:
+            raw = extra_data['requested_seasons']
+            if isinstance(raw, (list, tuple)):
+                seasons = []
+                for n in raw:
+                    try:
+                        seasons.append(f"Season {int(n)}")
+                    except (TypeError, ValueError):
+                        continue
+                if seasons:
+                    return seasons
         if 'Requested Seasons' in extra_data:
             seasons_str = extra_data['Requested Seasons']
             if isinstance(seasons_str, str):

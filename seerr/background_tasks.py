@@ -2019,15 +2019,18 @@ async def populate_queues_from_unified_media():
                         
                         # Only add to queue if there are seasons that actually need processing
                         if seasons_need_processing:
-                            # Prepare extra_data with only the seasons that need processing
-                            extra_data = item.extra_data or {}
-                            if isinstance(extra_data, str):
+                            # Prepare extra_data with only the seasons that need processing.
+                            # extra_data from DB may be a dict, a list (Overseerr format), or JSON string.
+                            # We must use a dict here so extra_data['requested_seasons'] does not raise.
+                            raw_extra = item.extra_data or {}
+                            if isinstance(raw_extra, str):
                                 try:
-                                    extra_data = json.loads(extra_data)
+                                    raw_extra = json.loads(raw_extra)
                                 except (json.JSONDecodeError, TypeError):
-                                    extra_data = {}
-                            
-                            extra_data['requested_seasons'] = seasons_need_processing
+                                    raw_extra = {}
+                            extra_data = raw_extra if isinstance(raw_extra, dict) else {}
+                            extra_data = dict(extra_data)  # copy so we don't mutate stored list
+                            extra_data['requested_seasons'] = [int(s) for s in seasons_need_processing if s is not None]
                             
                             success = await add_tv_to_queue(
                                 imdb_id=item.imdb_id or '',
@@ -3217,19 +3220,21 @@ async def check_stuck_items_on_startup():
                                 continue
                             
                             # Re-queue the TV show for processing with only the seasons that need it
-                            # Ensure extra_data is properly parsed if it's a JSON string
+                            # extra_data from DB may be a dict, a list (Overseerr format), or JSON string.
+                            # We must use a dict so extra_data['requested_seasons'] does not raise.
                             extra_data = tv_show.extra_data
                             if isinstance(extra_data, str):
                                 try:
                                     import json
                                     extra_data = json.loads(extra_data)
-                                    # Parsed extra_data from JSON string
                                 except (json.JSONDecodeError, TypeError) as e:
                                     logger.warning(f"Failed to parse extra_data as JSON: {extra_data}, error: {e}")
                                     extra_data = {}
-                            
-                            # Add the seasons that need processing to extra_data
-                            extra_data['requested_seasons'] = seasons_need_processing
+                            if not isinstance(extra_data, dict):
+                                extra_data = {}
+                            else:
+                                extra_data = dict(extra_data)
+                            extra_data['requested_seasons'] = [int(s) for s in seasons_need_processing if s is not None]
                             
                             await add_tv_to_queue(
                                 imdb_id=tv_show.imdb_id,
@@ -4139,62 +4144,69 @@ def is_safe_to_refresh_library_stats(min_idle_seconds=30):
 
 async def check_failed_items_availability():
     """
-    Periodically check if failed items are now available in Seerr
-    and automatically mark them as complete if they are.
+    Periodically check Overseerr and mark items complete when they are available there.
+    - Movies: run on failed or processing (not completed). If status 5 in Overseerr, mark complete.
+    - TV: run on any show that has any episodes marked not processed. Per-season: only if
+      that season has status 5 in Overseerr do we mark that season's unprocessed episodes
+      complete, then recompute show status.
     """
     if not USE_DATABASE:
         return
-    
+
     try:
-        from seerr.overseerr import check_media_availability, mark_completed
-        from seerr.unified_media_manager import update_media_processing_status
+        from seerr.overseerr import check_media_availability, check_tv_availability_by_season, mark_completed
+        from seerr.unified_media_manager import update_media_processing_status, mark_episodes_complete, recompute_tv_show_status
         from seerr.unified_models import UnifiedMedia
         from seerr.database import get_db
-        
-        log_info("Availability Check", "Starting availability check for failed items", 
+
+        log_info("Availability Check", "Starting availability check (movies: failed/processing; TV: any with unprocessed)", 
                 module="background_tasks", function="check_failed_items_availability")
-        
-        # Get ALL failed items directly (not filtered by retry eligibility)
-        # The availability check should check all failed items, not just those ready for retry
+
         db = get_db()
         try:
-            # Get all failed movies
-            failed_movies = db.query(UnifiedMedia).filter(
+            # Movies: failed or processing only (not completed)
+            movies_to_check = db.query(UnifiedMedia).filter(
                 UnifiedMedia.media_type == 'movie',
-                UnifiedMedia.status == 'failed'
+                UnifiedMedia.status.in_(['failed', 'processing'])
             ).limit(100).all()
-            
-            # Get all failed TV shows
-            failed_tv = db.query(UnifiedMedia).filter(
+
+            # TV: any show that has at least one season with unprocessed_episodes
+            all_tv = db.query(UnifiedMedia).filter(
                 UnifiedMedia.media_type == 'tv',
-                UnifiedMedia.status == 'failed'
-            ).limit(100).all()
-            
-            all_failed = failed_movies + failed_tv
+                UnifiedMedia.status != 'ignored',
+                UnifiedMedia.seasons_data.isnot(None),
+            ).limit(200).all()
+
+            tv_with_unprocessed = []
+            for show in all_tv:
+                seasons_data = show.seasons_data or []
+                if isinstance(seasons_data, str):
+                    import json as _json
+                    seasons_data = _json.loads(seasons_data) if seasons_data else []
+                for season in seasons_data or []:
+                    if not isinstance(season, dict):
+                        continue
+                    unprocessed = season.get('unprocessed_episodes') or []
+                    if isinstance(unprocessed, list) and len(unprocessed) > 0:
+                        tv_with_unprocessed.append(show)
+                        break
         finally:
             db.close()
-        log_info("Availability Check", f"Checking {len(all_failed)} failed items for availability", 
+
+        log_info("Availability Check", f"Checking {len(movies_to_check)} movie(s), {len(tv_with_unprocessed)} TV show(s) with unprocessed episodes", 
                 module="background_tasks", function="check_failed_items_availability")
-        
-        marked_complete = 0
-        
-        for media in all_failed:
+
+        marked_movies = 0
+        for media in movies_to_check:
             try:
-                # Check if media is available in Seerr
                 availability = check_media_availability(media.tmdb_id, media.media_type)
-                
                 if availability and availability.get('available'):
-                    # Media is now available in Seerr - mark as complete
                     media_id = availability.get('media_id')
-                    
                     if media_id:
-                        # Mark as available in Seerr (if not already)
                         if mark_completed(media_id, media.tmdb_id):
                             log_info("Availability Check", 
                                     f"Marked {media.title} (TMDB: {media.tmdb_id}) as available in Seerr", 
                                     module="background_tasks", function="check_failed_items_availability")
-                        
-                        # Update database status to completed
                         update_media_processing_status(
                             media.id,
                             'completed',
@@ -4205,23 +4217,57 @@ async def check_failed_items_availability():
                                 'auto_detected': True
                             }
                         )
-                        
-                        marked_complete += 1
+                        marked_movies += 1
                         log_success("Availability Check", 
-                                   f"Auto-marked {media.title} as complete (was available in Seerr)", 
+                                   f"Auto-marked movie {media.title} as complete (available in Seerr)", 
                                    module="background_tasks", function="check_failed_items_availability")
-                
             except Exception as e:
-                log_error("Availability Check", 
-                         f"Error checking availability for {media.title}: {e}", 
+                log_error("Availability Check", f"Error checking movie {media.title}: {e}", 
                          module="background_tasks", function="check_failed_items_availability")
                 continue
-        
-        if marked_complete > 0:
+
+        marked_tv_seasons = 0
+        for show in tv_with_unprocessed:
+            try:
+                result = check_tv_availability_by_season(show.tmdb_id)
+                if not result:
+                    continue
+                seasons_available = set(result.get('seasons_available') or [])
+                if not seasons_available:
+                    continue
+
+                seasons_data = show.seasons_data or []
+                if isinstance(seasons_data, str):
+                    import json as _json
+                    seasons_data = _json.loads(seasons_data) if seasons_data else []
+                for season in seasons_data or []:
+                    if not isinstance(season, dict):
+                        continue
+                    season_num = season.get('season_number')
+                    if season_num is None or season_num not in seasons_available:
+                        continue
+                    unprocessed = season.get('unprocessed_episodes') or []
+                    if not isinstance(unprocessed, list) or len(unprocessed) == 0:
+                        continue
+
+                    # This season has unprocessed episodes and is available (status 5) in Overseerr
+                    mark_episodes_complete(show.id, season_number=int(season_num), episode_numbers=None, check_seerr=False)
+                    marked_tv_seasons += 1
+                    log_success("Availability Check", 
+                               f"Marked {show.title} S{season_num} as complete (available in Seerr)", 
+                               module="background_tasks", function="check_failed_items_availability")
+
+                recompute_tv_show_status(show.id)
+            except Exception as e:
+                log_error("Availability Check", f"Error checking TV {getattr(show, 'title', '')}: {e}", 
+                         module="background_tasks", function="check_failed_items_availability")
+                continue
+
+        if marked_movies > 0 or marked_tv_seasons > 0:
             log_success("Availability Check", 
-                       f"Auto-marked {marked_complete} failed item(s) as complete", 
+                       f"Auto-marked {marked_movies} movie(s) and {marked_tv_seasons} TV season(s) as complete", 
                        module="background_tasks", function="check_failed_items_availability")
-        
+
     except Exception as e:
         log_error("Availability Check", f"Error in availability check task: {e}", 
                  module="background_tasks", function="check_failed_items_availability") 
