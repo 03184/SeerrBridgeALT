@@ -3300,7 +3300,10 @@ def _parse_first_aired(episode: dict) -> Optional[datetime]:
 
 async def check_show_subscriptions(add_to_queue: bool = True):
     """
-    Check all subscribed shows for new episodes (anchor = subscription_started_at).
+    Check all subscribed shows for new episodes.
+    Anchor = subscription_started_at when set; when unset, per-season anchor = first episode's
+    air date so all aired episodes in the season are considered. Uses actual episode numbers
+    from Trakt for unprocessed (not "first N"), and never shrinks aired_episodes below confirmed.
     Refreshes from Trakt (forward-only: only seasons/episodes on or after anchor).
     Updates DB and optionally adds to queue when there are episodes to fetch (add_to_queue=False
     when called from 3am maintenance so a single queue population pass runs at the end).
@@ -3339,9 +3342,11 @@ async def check_show_subscriptions(add_to_queue: bool = True):
             logger.warning(f"No trakt_id for {show_title}. Skipping.")
             continue
 
-        # Anchor: only track episodes that aired or are scheduled on or after this date
-        anchor_dt = subscription.subscription_started_at or subscription.created_at
-        anchor_date = anchor_dt.date() if anchor_dt else datetime.min.date()
+        # Anchor: only track episodes that aired or are scheduled on or after this date.
+        # If subscription_started_at is not set, we use per-season anchor = first episode's air date (computed per season below).
+        subscription_anchor_date = None
+        if subscription.subscription_started_at is not None:
+            subscription_anchor_date = subscription.subscription_started_at.date() if hasattr(subscription.subscription_started_at, 'date') else subscription.subscription_started_at
 
         all_seasons_trakt = get_all_seasons_from_trakt(str(trakt_show_id))
         if not all_seasons_trakt:
@@ -3357,24 +3362,44 @@ async def check_show_subscriptions(add_to_queue: bool = True):
                 continue
             episodes = trakt_season.get('episodes', [])
             episode_count = len(episodes)
-            # Count episodes that aired on or after anchor (and on or before today)
-            aired_on_or_after_anchor = 0
+
+            # Per-season anchor: when no subscription_started_at, use first episode of season's air date
+            if subscription_anchor_date is not None:
+                anchor_date = subscription_anchor_date
+            else:
+                first_aired_dates = []
+                for ep in episodes:
+                    fa = _parse_first_aired(ep)
+                    if fa is not None:
+                        d = fa.date() if hasattr(fa, 'date') else fa
+                        first_aired_dates.append(d)
+                anchor_date = min(first_aired_dates) if first_aired_dates else datetime.min.date()
+
+            # Collect actual episode numbers that aired in [anchor, today] and total aired to date
+            episode_numbers_in_window = []
+            total_aired = 0
             has_future_or_unaired = False
             for ep in episodes:
                 fa = _parse_first_aired(ep)
+                ep_num = ep.get('number')
                 if fa is None:
                     has_future_or_unaired = True
                     continue
                 d = fa.date() if hasattr(fa, 'date') else fa
-                if anchor_date <= d <= today_utc:
-                    aired_on_or_after_anchor += 1
+                if d <= today_utc:
+                    total_aired += 1
+                if anchor_date <= d <= today_utc and ep_num is not None:
+                    episode_numbers_in_window.append(ep_num)
                 elif d > today_utc:
                     has_future_or_unaired = True
+
             # Only include season if it has episodes on or after anchor or future/unaired
-            if aired_on_or_after_anchor == 0 and not has_future_or_unaired:
+            if not episode_numbers_in_window and not has_future_or_unaired:
                 continue
+
             now_iso = datetime.utcnow().isoformat()
-            unprocessed = [f"E{str(i).zfill(2)}" for i in range(1, aired_on_or_after_anchor + 1)] if aired_on_or_after_anchor > 0 else []
+            # Unprocessed = those specific episode numbers that aired in window, not "first N"
+            unprocessed = [f"E{str(n).zfill(2)}" for n in sorted(episode_numbers_in_window)]
 
             if season_number in existing_season_numbers:
                 for ex in existing_seasons_data:
@@ -3383,25 +3408,25 @@ async def check_show_subscriptions(add_to_queue: bool = True):
                         failed = ex.get('failed_episodes', [])
                         unprocessed = [e for e in unprocessed if e not in confirmed]
                         ex['episode_count'] = episode_count
-                        ex['aired_episodes'] = aired_on_or_after_anchor
+                        # Never shrink aired_episodes below what we've already confirmed
+                        ex['aired_episodes'] = max(total_aired, len(confirmed))
                         ex['unprocessed_episodes'] = list(set(ex.get('unprocessed_episodes', []) + unprocessed))
                         ex['last_checked'] = now_iso
                         ex['updated_at'] = now_iso
-                        # Processing only when there are aired-but-unprocessed episodes; unaired-only -> pending
-                        ex['status'] = 'processing' if unprocessed else ('pending' if (aired_on_or_after_anchor < episode_count) else 'completed')
+                        # Processing when there are aired-but-unprocessed; use total_aired for pending vs completed
+                        ex['status'] = 'processing' if unprocessed else ('pending' if (total_aired < episode_count) else 'completed')
                         break
             else:
                 new_season = EnhancedSeasonManager.create_enhanced_season_data(
                     season_number=season_number,
                     episode_count=episode_count,
-                    aired_episodes=aired_on_or_after_anchor,
+                    aired_episodes=total_aired,
                     confirmed_episodes=[],
                     failed_episodes=[],
                     unprocessed_episodes=unprocessed,
                     is_discrepant=False
                 )
-                # Processing only when there are aired-but-unprocessed episodes; unaired-only -> pending
-                new_season['status'] = 'processing' if unprocessed else 'pending'
+                new_season['status'] = 'processing' if unprocessed else ('pending' if (total_aired < episode_count) else 'completed')
                 existing_seasons_data.append(new_season)
                 existing_season_numbers.add(season_number)
 
