@@ -249,6 +249,15 @@ async def lifespan(app: FastAPI):
         # Continue without database if it fails
         logger.warning("Continuing without database - using file-based logging")
     
+    # Sync .env → DB so task_config (used by 3am etc.) matches UI/.env
+    try:
+        from seerr.task_config_manager import sync_env_to_db
+        n = sync_env_to_db()
+        if n:
+            logger.info(f"Synced {n} .env setting(s) to database")
+    except Exception as e:
+        logger.warning(f"Env→DB sync skipped: {e}")
+    
     # Check RD token on startup
     check_and_refresh_access_token()
     

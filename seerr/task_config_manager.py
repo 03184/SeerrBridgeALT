@@ -3,11 +3,36 @@ Task Configuration Manager for SeerrBridge
 Handles reading and updating task configuration from the database
 """
 import json
+import os
 from typing import Any, Dict, Optional, Union
 from datetime import datetime
 from sqlalchemy.orm import Session
 from seerr.database import get_db, SystemConfig
 from seerr.db_logger import log_info, log_error, log_debug
+
+# Config keys that can be set from .env. On startup, any value set in .env is pushed to DB (one-way: .env → DB).
+CONFIG_KEY_TO_ENV = {
+    'background_tasks_enabled': 'BACKGROUND_TASKS_ENABLED',
+    'scheduler_enabled': 'SCHEDULER_ENABLED',
+    'enable_automatic_background_task': 'ENABLE_AUTOMATIC_BACKGROUND_TASK',
+    'enable_show_subscription_task': 'ENABLE_SHOW_SUBSCRIPTION_TASK',
+    'refresh_interval_minutes': 'REFRESH_INTERVAL_MINUTES',
+    'headless_mode': 'HEADLESS_MODE',
+    'torrent_filter_regex': 'TORRENT_FILTER_REGEX',
+    'max_movie_size': 'MAX_MOVIE_SIZE',
+    'max_episode_size': 'MAX_EPISODE_SIZE',
+    'token_refresh_interval_minutes': 'TOKEN_REFRESH_INTERVAL_MINUTES',
+    'movie_processing_check_interval_minutes': 'MOVIE_PROCESSING_CHECK_INTERVAL_MINUTES',
+    'subscription_check_interval_minutes': 'SUBSCRIPTION_CHECK_INTERVAL_MINUTES',
+    'movie_queue_maxsize': 'MOVIE_QUEUE_MAXSIZE',
+    'tv_queue_maxsize': 'TV_QUEUE_MAXSIZE',
+    'enable_failed_item_retry': 'ENABLE_FAILED_ITEM_RETRY',
+    'failed_item_retry_interval_minutes': 'FAILED_ITEM_RETRY_INTERVAL_MINUTES',
+    'failed_item_max_retry_attempts': 'FAILED_ITEM_MAX_RETRY_ATTEMPTS',
+    'failed_item_retry_delay_hours': 'FAILED_ITEM_RETRY_DELAY_HOURS',
+    'failed_item_retry_backoff_multiplier': 'FAILED_ITEM_RETRY_BACKOFF_MULTIPLIER',
+    'failed_item_max_retry_delay_hours': 'FAILED_ITEM_MAX_RETRY_DELAY_HOURS',
+}
 
 
 class TaskConfigManager:
@@ -186,3 +211,37 @@ class TaskConfigManager:
 
 # Global instance
 task_config = TaskConfigManager()
+
+
+def sync_env_to_db() -> int:
+    """
+    One-way sync: .env → database. For each config key that has an env var set in .env,
+    update system_config so the DB matches .env. Does not modify .env.
+    Returns the number of keys updated.
+    """
+    from seerr.config import USE_DATABASE
+    if not USE_DATABASE:
+        return 0
+    from seerr.config import load_config
+    load_config(override=True)
+    updated = 0
+    for config_key, env_key in CONFIG_KEY_TO_ENV.items():
+        value = os.getenv(env_key)
+        if value is None or value == '':
+            continue
+        value = value.strip()
+        if value.lower() in ('true', 'false'):
+            config_type = 'bool'
+            py_value = value.lower() == 'true'
+        elif value.replace('.', '', 1).isdigit():
+            config_type = 'float' if '.' in value else 'int'
+            py_value = float(value) if '.' in value else int(value)
+        else:
+            config_type = 'string'
+            py_value = value
+        if task_config.set_config(config_key, py_value, config_type):
+            updated += 1
+    if updated:
+        log_info("Config Sync", f"Synced {updated} setting(s) from .env to database", 
+                 module="task_config_manager", function="sync_env_to_db")
+    return updated
