@@ -139,6 +139,43 @@ def generate_seasons_processing_string(seasons_data: List[Dict[str, Any]]) -> st
     else:
         return ",".join(map(str, season_numbers))
 
+
+def generate_seasons_processing_string_from_unprocessed(seasons_data: List[Dict[str, Any]]) -> str:
+    """
+    Generate a seasons_processing string from seasons_data including only seasons
+    that have non-empty unprocessed_episodes (so queue/search know which seasons to process).
+    """
+    if not seasons_data or not isinstance(seasons_data, list):
+        return ""
+    season_numbers = []
+    for season in seasons_data:
+        if not isinstance(season, dict):
+            continue
+        unprocessed = season.get('unprocessed_episodes') or []
+        if not (isinstance(unprocessed, list) and len(unprocessed) > 0):
+            continue
+        season_num = season.get('season_number')
+        if season_num is not None and (isinstance(season_num, (int, str)) and str(season_num).isdigit()):
+            season_numbers.append(int(season_num))
+    if not season_numbers:
+        return ""
+    season_numbers = sorted(list(set(season_numbers)))
+    if len(season_numbers) > 2:
+        ranges = []
+        start = season_numbers[0]
+        end = start
+        for i in range(1, len(season_numbers)):
+            if season_numbers[i] == season_numbers[i - 1] + 1:
+                end = season_numbers[i]
+            else:
+                ranges.append(str(start) if start == end else f"{start}-{end}")
+                start = season_numbers[i]
+                end = start
+        ranges.append(str(start) if start == end else f"{start}-{end}")
+        return ",".join(ranges)
+    return ",".join(map(str, season_numbers))
+
+
 def get_media_by_id(media_id: int) -> Optional[UnifiedMedia]:
     """
     Get media record by ID

@@ -198,6 +198,19 @@ class QueuePersistenceManager:
                 title = item.title
                 if queue_type == 'movie' and item.year is not None:
                     title = f"{item.title} ({item.year})"
+                extra_data = item.extra_data
+                if queue_type == 'tv':
+                    if isinstance(extra_data, str):
+                        try:
+                            extra_data = json.loads(extra_data) if extra_data else {}
+                        except (json.JSONDecodeError, TypeError):
+                            extra_data = {}
+                    if not isinstance(extra_data, dict):
+                        extra_data = {}
+                    extra_data = dict(extra_data)
+                    # So search receives requested seasons when queue is rebuilt from DB
+                    if item.seasons_processing and not extra_data.get('requested_seasons') and not extra_data.get('Requested Seasons'):
+                        extra_data['Requested Seasons'] = item.seasons_processing
                 queued_items.append({
                     'id': item.id,
                     'imdb_id': item.imdb_id,
@@ -209,7 +222,7 @@ class QueuePersistenceManager:
                     'queue_added_at': item.queue_added_at,
                     'queue_attempts': item.queue_attempts,
                     'status': item.status,
-                    'extra_data': item.extra_data
+                    'extra_data': extra_data if queue_type == 'tv' else item.extra_data
                 })
             
             log_info("Queue Persistence", f"Found {len(queued_items)} {queue_type} items in database queue", 

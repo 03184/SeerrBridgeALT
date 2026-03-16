@@ -2019,6 +2019,10 @@ async def populate_queues_from_unified_media():
                         
                         # Only add to queue if there are seasons that actually need processing
                         if seasons_need_processing:
+                            # Persist seasons_processing on the media record so queue rebuild from DB has the season list
+                            seasons_processing_str = ",".join(str(int(s)) for s in sorted(seasons_need_processing) if s is not None)
+                            from seerr.unified_media_manager import update_media_details
+                            update_media_details(item.id, seasons_processing=seasons_processing_str)
                             # Prepare extra_data with only the seasons that need processing.
                             # extra_data from DB may be a dict, a list (Overseerr format), or JSON string.
                             # We must use a dict here so extra_data['requested_seasons'] does not raise.
@@ -2031,7 +2035,7 @@ async def populate_queues_from_unified_media():
                             extra_data = raw_extra if isinstance(raw_extra, dict) else {}
                             extra_data = dict(extra_data)  # copy so we don't mutate stored list
                             extra_data['requested_seasons'] = [int(s) for s in seasons_need_processing if s is not None]
-                            
+
                             success = await add_tv_to_queue(
                                 imdb_id=item.imdb_id or '',
                                 movie_title=f"{item.title} ({item.year})",
@@ -3432,9 +3436,12 @@ async def check_show_subscriptions(add_to_queue: bool = True):
 
         # Persist merged seasons then derive status (recompute sets status and is_in_queue)
         existing_seasons_data.sort(key=lambda x: x.get('season_number', 0))
+        from seerr.unified_media_manager import generate_seasons_processing_string_from_unprocessed
+        seasons_processing = generate_seasons_processing_string_from_unprocessed(existing_seasons_data)
         update_media_details(
             subscription.id,
             seasons_data=existing_seasons_data,
+            seasons_processing=seasons_processing or None,
             last_checked_at=datetime.utcnow(),
             subscription_last_checked=datetime.utcnow()
         )
