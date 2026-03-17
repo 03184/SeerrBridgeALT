@@ -439,6 +439,18 @@ def parse_requested_seasons(extra_data):
                         continue
                 if seasons:
                     return seasons
+        # Startup re-queue and similar paths write seasons here; same format as requested_seasons
+        if 'seasons_requeued' in extra_data:
+            raw = extra_data['seasons_requeued']
+            if isinstance(raw, (list, tuple)):
+                seasons = []
+                for n in raw:
+                    try:
+                        seasons.append(f"Season {int(n)}")
+                    except (TypeError, ValueError):
+                        continue
+                if seasons:
+                    return seasons
         if 'Requested Seasons' in extra_data:
             seasons_str = extra_data['Requested Seasons']
             if isinstance(seasons_str, str):
