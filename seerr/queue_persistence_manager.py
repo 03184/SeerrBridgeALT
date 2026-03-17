@@ -439,17 +439,25 @@ class QueuePersistenceManager:
             memory_items = []
             memory_tmdb_ids = set()
             
+            # Movie queue control tasks (first element is this string; not an IMDb ID)
+            movie_special_tasks = ("movie_processing_check", "failed_item_processing", "trakt_pending_retry")
             try:
                 # Drain queue
                 while not in_memory_queue.empty():
                     item = in_memory_queue.get_nowait()
                     memory_items.append(item)
-                    # Extract tmdb_id
+                    # Extract tmdb_id so we don't re-add from DB items already in memory
                     if len(item) >= 6:
-                        if not isinstance(item[0], str):  # Regular movie item
-                            memory_tmdb_ids.add(item[5])
-                        elif item[0] == "tv_processing" and len(item) >= 8:
+                        if queue_type == 'movie':
+                            # Movie items are (imdb_id, title, ...); item[0] is string (imdb_id), tmdb_id is item[5]
+                            if isinstance(item[0], str) and item[0] not in movie_special_tasks:
+                                memory_tmdb_ids.add(item[5])
+                            # else: special task, no tmdb_id
+                        elif queue_type == 'tv' and item[0] == "tv_processing" and len(item) >= 8:
                             memory_tmdb_ids.add(item[7])
+                        elif not isinstance(item[0], str):
+                            # Legacy: non-string first element (e.g. numeric) treated as movie tmdb_id at [5]
+                            memory_tmdb_ids.add(item[5])
             except Exception as e:
                 log_error("Queue Reconciliation", f"Error draining memory queue: {e}", 
                          module="queue_persistence_manager", function="reconcile_queue_from_database")
@@ -464,17 +472,24 @@ class QueuePersistenceManager:
                 keep_item = False
                 item_tmdb_id = None
                 if len(item) >= 6:
-                    if not isinstance(item[0], str):  # Regular movie item
-                        if item[5] in db_tmdb_ids:
+                    if queue_type == 'movie':
+                        # Movie items: item[0] is imdb_id (string), item[5] is tmdb_id
+                        if isinstance(item[0], str) and item[0] not in movie_special_tasks:
+                            if item[5] in db_tmdb_ids:
+                                keep_item = True
+                                item_tmdb_id = item[5]
+                        else:
+                            # Special tasks (movie_processing_check, etc.) - keep them
                             keep_item = True
-                            item_tmdb_id = item[5]
                     elif item[0] == "tv_processing" and len(item) >= 8:
                         if item[7] in db_tmdb_ids:
                             keep_item = True
                             item_tmdb_id = item[7]
                     else:
-                        # Special tasks (like "movie_processing_check") - keep them
-                        keep_item = True
+                        # Legacy: non-string first element
+                        if item[5] in db_tmdb_ids:
+                            keep_item = True
+                            item_tmdb_id = item[5]
                 
                 if keep_item:
                     # Deduplicate: only keep first occurrence of each tmdb_id
