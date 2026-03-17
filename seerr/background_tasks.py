@@ -3077,7 +3077,6 @@ async def check_stuck_items_on_startup():
                         logger.info(f"Startup Check: Checking stuck movie: {movie.title} (TMDB: {movie.tmdb_id})")
                         
                         # Check release date from database first (avoid unnecessary Trakt API call)
-                        from datetime import datetime, timezone
                         current_time = datetime.now(timezone.utc)
                         
                         if movie.released_date:
