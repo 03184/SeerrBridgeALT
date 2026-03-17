@@ -321,6 +321,9 @@ async def initialize_background_tasks():
     # On first boot, immediately check for stuck items
     await check_stuck_items_on_startup()
     
+    # Try to fill in missing Trakt IDs (e.g. future titles that appear on Trakt later)
+    await refresh_missing_trakt_ids()
+    
     # One-time population from Overseerr so new requests get one startup pass (no interval; next population is 3am or manual)
     await populate_queues_from_overseerr()
     
@@ -409,6 +412,46 @@ async def add_failed_item_processing_to_queue():
         log_error("Failed Item Processing", f"Error adding failed item processing to queue: {e}", module="background_tasks", function="add_failed_item_processing_to_queue")
 
 
+async def refresh_missing_trakt_ids():
+    """
+    One-time pass: for movies and TV in unified_media that have no Trakt ID,
+    call Trakt search to try to fetch and persist one. Safe to run at startup and 3am.
+    """
+    if not USE_DATABASE:
+        return
+    from sqlalchemy import or_
+    from seerr.unified_models import UnifiedMedia
+    from seerr.unified_media_manager import update_media_details
+
+    db = get_db()
+    try:
+        missing = db.query(UnifiedMedia).filter(
+            UnifiedMedia.media_type.in_(['movie', 'tv']),
+            UnifiedMedia.status.in_(['processing', 'pending', 'unreleased', 'failed']),
+            or_(UnifiedMedia.trakt_id.is_(None), UnifiedMedia.trakt_id == '')
+        ).all()
+        if not missing:
+            log_info("Trakt ID Refresh", "No media missing Trakt ID; skipping refresh.", module="background_tasks", function="refresh_missing_trakt_ids")
+            return
+        log_info("Trakt ID Refresh", f"Found {len(missing)} item(s) missing Trakt ID; attempting to fetch.", module="background_tasks", function="refresh_missing_trakt_ids")
+        refreshed = 0
+        for record in missing:
+            try:
+                details = get_media_details_from_trakt(str(record.tmdb_id), record.media_type)
+                if details and details.get('trakt_id'):
+                    update_media_details(record.id, trakt_id=details['trakt_id'])
+                    refreshed += 1
+                    log_info("Trakt ID Refresh", f"Refreshed Trakt ID for {record.title} (TMDB: {record.tmdb_id})", module="background_tasks", function="refresh_missing_trakt_ids")
+            except Exception as e:
+                log_warning("Trakt ID Refresh", f"Error refreshing Trakt ID for {record.title} (TMDB: {record.tmdb_id}): {e}", module="background_tasks", function="refresh_missing_trakt_ids")
+        if refreshed > 0:
+            log_success("Trakt ID Refresh", f"Refreshed Trakt ID for {refreshed} of {len(missing)} item(s).", module="background_tasks", function="refresh_missing_trakt_ids")
+    except Exception as e:
+        log_error("Trakt ID Refresh", f"Error during Trakt ID refresh: {e}", module="background_tasks", function="refresh_missing_trakt_ids")
+    finally:
+        db.close()
+
+
 async def daily_3am_maintenance():
     """
     Single 3am job: wait for queue idle, then movie recheck, then TV maintenance.
@@ -417,6 +460,7 @@ async def daily_3am_maintenance():
     if not USE_DATABASE:
         return
     await queue_processing_complete.wait()
+    await refresh_missing_trakt_ids()
     await daily_3am_movie_recheck()
     await daily_3am_tv_maintenance()
 

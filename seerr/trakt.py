@@ -17,8 +17,29 @@ from seerr.db_logger import log_info, log_success, log_error
 TRAKT_RATE_LIMIT = 1000
 TRAKT_RATE_LIMIT_PERIOD = 5 * 60  # 5 minutes in seconds
 
+# Cache for (tmdb_id, media_type) that Trakt returned empty/invalid for - avoid repeated API calls
+TRAKT_NOT_FOUND_CACHE_TTL_SECONDS = 3600  # 1 hour
+_trakt_not_found_cache: Dict[tuple, float] = {}
+
 trakt_api_calls = 0
 last_reset_time = time.time()
+
+
+def _record_trakt_not_found(tmdb_id: str, media_type: str) -> None:
+    """Record that Trakt had no/invalid result for this ID so we skip repeated calls for a while."""
+    global _trakt_not_found_cache
+    now = time.time()
+    key = (str(tmdb_id), media_type)
+    _trakt_not_found_cache[key] = now + TRAKT_NOT_FOUND_CACHE_TTL_SECONDS
+    # Prune expired entries to avoid unbounded growth
+    _trakt_not_found_cache = {k: v for k, v in _trakt_not_found_cache.items() if v > now}
+
+
+def _is_trakt_not_found_cached(tmdb_id: str, media_type: str) -> bool:
+    """Return True if we recently got not-found from Trakt for this ID (and cache is still valid)."""
+    key = (str(tmdb_id), media_type)
+    expiry = _trakt_not_found_cache.get(key)
+    return expiry is not None and time.time() < expiry
 
 def get_media_details_from_trakt(tmdb_id: str, media_type: str) -> Optional[dict]:
     """
@@ -68,6 +89,9 @@ def get_media_details_from_trakt(tmdb_id: str, media_type: str) -> Optional[dict
     search_url = None
     search_response_time = None
     if trakt_id is None:
+        if _is_trakt_not_found_cached(tmdb_id, media_type):
+            logger.debug(f"Skipping Trakt API call for {tmdb_id} ({media_type}): previously not found (cached).")
+            return None
         url = f"https://api.trakt.tv/search/tmdb/{tmdb_id}?type={trakt_type}"
         headers = {
             "Content-type": "application/json",
@@ -91,12 +115,14 @@ def get_media_details_from_trakt(tmdb_id: str, media_type: str) -> Optional[dict
                         logger.error(f"Trakt API response first result is not a dictionary: {type(first_result)}")
                         if USE_DATABASE:
                             track_trakt_api_usage(url, False, search_response_time)
+                        _record_trakt_not_found(tmdb_id, media_type)
                         return None
                     
                     if trakt_type not in first_result:
                         logger.error(f"{trakt_type.capitalize()} details for ID not found in Trakt API response (missing key '{trakt_type}'). Available keys: {list(first_result.keys())}")
                         if USE_DATABASE:
                             track_trakt_api_usage(url, False, search_response_time)
+                        _record_trakt_not_found(tmdb_id, media_type)
                         return None
                     
                     media_info = first_result[trakt_type]
@@ -104,18 +130,21 @@ def get_media_details_from_trakt(tmdb_id: str, media_type: str) -> Optional[dict
                         logger.error(f"Trakt API response media_info is not a dictionary: {type(media_info)}")
                         if USE_DATABASE:
                             track_trakt_api_usage(url, False, search_response_time)
+                        _record_trakt_not_found(tmdb_id, media_type)
                         return None
                     
                     if 'ids' not in media_info or not isinstance(media_info['ids'], dict):
                         logger.error(f"Trakt API response media_info missing 'ids' dictionary")
                         if USE_DATABASE:
                             track_trakt_api_usage(url, False, search_response_time)
+                        _record_trakt_not_found(tmdb_id, media_type)
                         return None
                     
                     if 'trakt' not in media_info['ids']:
                         logger.error(f"Trakt API response media_info['ids'] missing 'trakt' key. Available keys: {list(media_info['ids'].keys())}")
                         if USE_DATABASE:
                             track_trakt_api_usage(url, False, search_response_time)
+                        _record_trakt_not_found(tmdb_id, media_type)
                         return None
                     
                     trakt_id = media_info['ids']['trakt']
@@ -125,11 +154,14 @@ def get_media_details_from_trakt(tmdb_id: str, media_type: str) -> Optional[dict
                     logger.error(f"{trakt_type.capitalize()} details for ID not found in Trakt API response (empty or invalid response).")
                     if USE_DATABASE:
                         track_trakt_api_usage(url, False, search_response_time)
+                    _record_trakt_not_found(tmdb_id, media_type)
                     return None
             else:
                 logger.error(f"Trakt API request failed with status code {response.status_code}")
                 if USE_DATABASE:
                     track_trakt_api_usage(url, False, search_response_time)
+                if response.status_code == 404:
+                    _record_trakt_not_found(tmdb_id, media_type)
                 return None
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching {trakt_type} details from Trakt API: {e}")
