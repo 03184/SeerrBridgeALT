@@ -996,6 +996,12 @@ def recompute_tv_show_status(media_id: int) -> bool:
     should be done explicitly by add_tv_to_queue().
     """
     try:
+        # Outside of a bounded "processing event" (startup/3am), we do not want shows to
+        # sit in 'processing' forever without being queued. In that case, treat any
+        # remaining work as 'failed' until the next processing event begins.
+        from seerr.task_config_manager import task_config
+        processing_event_active = bool(task_config.get_config('processing_event_active', False))
+
         db = get_db()
         try:
             media = db.query(UnifiedMedia).filter(UnifiedMedia.id == media_id).first()
@@ -1021,8 +1027,12 @@ def recompute_tv_show_status(media_id: int) -> bool:
                     has_unaired = True
 
             if has_unprocessed:
-                new_status = 'processing'
-                new_stage = 'episodes_pending'
+                if processing_event_active:
+                    new_status = 'processing'
+                    new_stage = 'episodes_pending'
+                else:
+                    new_status = 'failed'
+                    new_stage = 'episodes_pending'
             elif has_failed:
                 new_status = 'failed'
                 new_stage = 'episodes_failed'
@@ -1055,6 +1065,65 @@ def recompute_tv_show_status(media_id: int) -> bool:
             db.close()
     except Exception as e:
         log_error("TV Status", f"Error recomputing TV show status: {e}", module="unified_media_manager", function="recompute_tv_show_status")
+        return False
+
+
+def mark_tv_unprocessed_episodes_failed(media_id: int, season_numbers: Optional[List[int]] = None) -> bool:
+    """
+    Move unprocessed_episodes -> failed_episodes for the specified seasons (or all seasons if None).
+    This is used when a processing attempt fails so the show can remain failed until the next event.
+    """
+    try:
+        db = get_db()
+        try:
+            media = db.query(UnifiedMedia).filter(UnifiedMedia.id == media_id).first()
+            if not media or media.media_type != 'tv':
+                return False
+            seasons_data = media.seasons_data or []
+            changed = False
+            for season in seasons_data:
+                if not isinstance(season, dict):
+                    continue
+                sn = season.get('season_number')
+                try:
+                    sn_int = int(sn) if sn is not None else None
+                except (TypeError, ValueError):
+                    sn_int = None
+                if season_numbers is not None and sn_int not in set(season_numbers):
+                    continue
+
+                confirmed = set(season.get('confirmed_episodes', []) or [])
+                unprocessed = list(season.get('unprocessed_episodes', []) or [])
+                if not unprocessed:
+                    continue
+                failed = set(season.get('failed_episodes', []) or [])
+
+                for ep in unprocessed:
+                    if ep in confirmed:
+                        continue
+                    failed.add(ep)
+                season['failed_episodes'] = sorted(list(failed))
+                season['unprocessed_episodes'] = []
+                season['updated_at'] = datetime.utcnow().isoformat()
+                changed = True
+
+            if not changed:
+                return True
+
+            media.seasons_data = seasons_data
+            media.last_checked_at = datetime.utcnow()
+            media.updated_at = datetime.utcnow()
+            db.commit()
+            log_info("TV Episodes", f"Marked unprocessed episodes as failed for media {media_id}", module="unified_media_manager", function="mark_tv_unprocessed_episodes_failed")
+            return True
+        except Exception as e:
+            db.rollback()
+            log_error("TV Episodes", f"Error marking unprocessed episodes failed: {e}", module="unified_media_manager", function="mark_tv_unprocessed_episodes_failed")
+            return False
+        finally:
+            db.close()
+    except Exception as e:
+        log_error("TV Episodes", f"Error marking unprocessed episodes failed: {e}", module="unified_media_manager", function="mark_tv_unprocessed_episodes_failed")
         return False
 
 

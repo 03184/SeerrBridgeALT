@@ -290,6 +290,16 @@ async def refresh_all_scheduled_tasks():
 async def initialize_background_tasks():
     """Initialize background tasks and the queue processor."""
     global processing_task, last_queue_activity_time, is_processing_queue
+
+    # Mark bounded startup processing event active (used by status recompute gating)
+    # so shows with unprocessed episodes become processing only while we are about
+    # to queue/process them.
+    task_config.set_config(
+        'processing_event_active',
+        True,
+        config_type='bool',
+        description='True while startup/3am processing event is running'
+    )
     
     # Initialize the queue activity timestamp
     last_queue_activity_time = time.time()
@@ -318,22 +328,31 @@ async def initialize_background_tasks():
     # Schedule all tasks based on database configuration
     await refresh_all_scheduled_tasks()
     
-    # On first boot, immediately check for stuck items
-    await check_stuck_items_on_startup()
-    
-    # Try to fill in missing Trakt IDs (e.g. future titles that appear on Trakt later)
-    await refresh_missing_trakt_ids()
-    
-    # One-time population from Overseerr so new requests get one startup pass (no interval; next population is 3am or manual)
-    await populate_queues_from_overseerr()
-    
-    # On first boot, immediately check for failed items
-    from seerr.failed_item_manager import process_failed_items
-    log_info("Failed Item Processing", "Checking failed items on startup...", module="background_tasks", function="init_background_tasks")
-    retry_count = await process_failed_items()
-    log_info("Failed Item Processing", f"Startup check: Processed {retry_count} failed items", module="background_tasks", function="init_background_tasks")
-    
-    scheduler.start()
+    try:
+        # On first boot, immediately check for stuck items
+        await check_stuck_items_on_startup()
+        
+        # Try to fill in missing Trakt IDs (e.g. future titles that appear on Trakt later)
+        await refresh_missing_trakt_ids()
+
+        # Promote failed episodes -> unprocessed at event start (so retries happen only on events)
+        await promote_failed_tv_episodes_for_retry()
+        
+        # One-time population from Overseerr so new requests get one startup pass (no interval; next population is 3am or manual)
+        await populate_queues_from_overseerr()
+
+        # Populate from unified_media for any processing items (including episodes_pending) after promotions/recompute
+        await populate_queues_from_unified_media()
+        
+        # On first boot, immediately check for failed items
+        from seerr.failed_item_manager import process_failed_items
+        log_info("Failed Item Processing", "Checking failed items on startup...", module="background_tasks", function="init_background_tasks")
+        retry_count = await process_failed_items()
+        log_info("Failed Item Processing", f"Startup check: Processed {retry_count} failed items", module="background_tasks", function="init_background_tasks")
+        
+        scheduler.start()
+    finally:
+        task_config.set_config('processing_event_active', False, config_type='bool')
 
 def type_slowly(driver, element, text, trigger_enter=False):
     """
@@ -452,6 +471,66 @@ async def refresh_missing_trakt_ids():
         db.close()
 
 
+async def promote_failed_tv_episodes_for_retry():
+    """
+    Event-start helper. For failed TV shows, move failed_episodes -> unprocessed_episodes so the
+    upcoming event will queue/process them. This makes retries happen only on startup/3am events.
+    """
+    if not USE_DATABASE:
+        return
+    from seerr.unified_models import UnifiedMedia
+    from seerr.unified_media_manager import update_media_details, recompute_tv_show_status
+
+    db = get_db()
+    try:
+        failed_shows = db.query(UnifiedMedia).filter(
+            UnifiedMedia.media_type == 'tv',
+            UnifiedMedia.status == 'failed',
+            UnifiedMedia.seasons_data.isnot(None),
+        ).all()
+        promoted = 0
+        for show in failed_shows:
+            try:
+                seasons_data = show.seasons_data or []
+                if isinstance(seasons_data, str):
+                    import json as _json
+                    seasons_data = _json.loads(seasons_data) if seasons_data else []
+                if not isinstance(seasons_data, list) or not seasons_data:
+                    continue
+
+                changed = False
+                for season in seasons_data:
+                    if not isinstance(season, dict):
+                        continue
+                    confirmed = set(season.get('confirmed_episodes', []) or [])
+                    failed = set(season.get('failed_episodes', []) or [])
+                    if not failed:
+                        continue
+                    unprocessed = set(season.get('unprocessed_episodes', []) or [])
+                    for ep_id in failed:
+                        if ep_id in confirmed:
+                            continue
+                        unprocessed.add(ep_id)
+                    season['unprocessed_episodes'] = sorted(list(unprocessed))
+                    season['failed_episodes'] = []
+                    season['updated_at'] = datetime.utcnow().isoformat()
+                    changed = True
+
+                if not changed:
+                    continue
+
+                update_media_details(show.id, seasons_data=seasons_data, last_checked_at=datetime.utcnow())
+                recompute_tv_show_status(show.id)
+                promoted += 1
+            except Exception as e:
+                log_warning("Failed Episode Retry", f"Error promoting failed episodes for {getattr(show, 'title', '')}: {e}", module="background_tasks", function="promote_failed_tv_episodes_for_retry")
+                continue
+        if promoted:
+            log_info("Failed Episode Retry", f"Promoted failed episodes to unprocessed for {promoted} show(s)", module="background_tasks", function="promote_failed_tv_episodes_for_retry")
+    finally:
+        db.close()
+
+
 async def daily_3am_maintenance():
     """
     Single 3am job: wait for queue idle, then movie recheck, then TV maintenance.
@@ -460,9 +539,14 @@ async def daily_3am_maintenance():
     if not USE_DATABASE:
         return
     await queue_processing_complete.wait()
-    await refresh_missing_trakt_ids()
-    await daily_3am_movie_recheck()
-    await daily_3am_tv_maintenance()
+    task_config.set_config('processing_event_active', True, config_type='bool')
+    try:
+        await refresh_missing_trakt_ids()
+        await promote_failed_tv_episodes_for_retry()
+        await daily_3am_movie_recheck()
+        await daily_3am_tv_maintenance()
+    finally:
+        task_config.set_config('processing_event_active', False, config_type='bool')
 
 
 async def daily_3am_movie_recheck():
@@ -1504,12 +1588,28 @@ async def process_tv_queue():
                             
                             # Update media status to failed when search fails
                             if USE_DATABASE:
-                                from seerr.unified_media_manager import update_media_processing_status, get_media_by_tmdb
+                                from seerr.unified_media_manager import update_media_processing_status, get_media_by_tmdb, mark_tv_unprocessed_episodes_failed
                                 
                                 # Find the media record by tmdb_id and media_type
                                 media_record = get_media_by_tmdb(tmdb_id, media_type)
                                 
                                 if media_record:
+                                    # Episode-level failure tracking: move any remaining unprocessed episodes
+                                    # for the requested seasons into failed_episodes so the show stays failed
+                                    # until the next processing event begins.
+                                    try:
+                                        requested = parse_requested_seasons(extra_data) if extra_data else []
+                                        season_nums = []
+                                        for s in requested:
+                                            if isinstance(s, str) and s.startswith('Season '):
+                                                try:
+                                                    season_nums.append(int(s.split()[-1]))
+                                                except (ValueError, IndexError):
+                                                    continue
+                                        mark_tv_unprocessed_episodes_failed(media_record.id, season_nums or None)
+                                    except Exception as ep_e:
+                                        log_warning("TV Processing", f"Failed to mark unprocessed episodes as failed for {movie_title}: {ep_e}", module="background_tasks", function="process_tv_queue")
+
                                     update_media_processing_status(
                                         media_record.id,
                                         'failed',
