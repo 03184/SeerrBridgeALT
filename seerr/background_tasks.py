@@ -1527,13 +1527,21 @@ async def process_tv_queue():
                                             seasons_data = media_record.seasons_data
                                             for season in seasons_data:
                                                 if isinstance(season, dict):
-                                                    season['status'] = 'completed'
                                                     season['updated_at'] = datetime.utcnow().isoformat()
                                                     aired = season.get('aired_episodes', 0)
                                                     if aired > 0:
-                                                        season['confirmed_episodes'] = [f"E{str(i).zfill(2)}" for i in range(1, aired + 1)]
-                                                        season['unprocessed_episodes'] = []
-                                                        season['failed_episodes'] = []
+                                                        expected = {f"E{str(i).zfill(2)}" for i in range(1, aired + 1)}
+                                                        confirmed = set(season.get('confirmed_episodes', []) or [])
+                                                        unprocessed = season.get('unprocessed_episodes', []) or []
+                                                        failed = season.get('failed_episodes', []) or []
+                                                        
+                                                        # Only wipe failure/unprocessed state if the season is already fully confirmed in the DB.
+                                                        # This prevents incorrectly marking a show complete when only a subset of episodes were actually added.
+                                                        if expected.issubset(confirmed) and not unprocessed and not failed:
+                                                            season['status'] = 'completed'
+                                                            season['confirmed_episodes'] = sorted(expected)
+                                                            season['unprocessed_episodes'] = []
+                                                            season['failed_episodes'] = []
                                             
                                             EnhancedSeasonManager.update_tv_show_seasons(tmdb_id, seasons_data, movie_title)
                                             update_media_details(

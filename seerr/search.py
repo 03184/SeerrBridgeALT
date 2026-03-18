@@ -259,18 +259,22 @@ def extract_episodes_from_torrents(driver, movie_title, season_num, processed_to
         for pattern in episode_patterns:
             matches = re.findall(pattern, torrent_title, re.IGNORECASE)
             if matches:
-                if len(matches[0]) == 1:  # Single episode
-                    episode_num = int(matches[0])
-                    if episode_num not in confirmed_episodes:
-                        confirmed_episodes.append(episode_num)
-                        logger.info(f"Found episode {episode_num} in torrent: {torrent_title}")
-                elif len(matches[0]) == 2:  # Episode range
-                    start_ep = int(matches[0][0])
-                    end_ep = int(matches[0][1])
+                # re.findall returns:
+                # - List[str] for single-episode patterns
+                # - List[Tuple[str, str]] for range patterns
+                first_match = matches[0]
+                if isinstance(first_match, tuple):  # Episode range
+                    start_ep = int(first_match[0])
+                    end_ep = int(first_match[1])
                     for ep in range(start_ep, end_ep + 1):
-                        if ep not in confirmed_episodes:
+                        if ep >= 1 and ep not in confirmed_episodes:
                             confirmed_episodes.append(ep)
                             logger.info(f"Found episode {ep} in range torrent: {torrent_title}")
+                else:  # Single episode
+                    episode_num = int(first_match)
+                    if episode_num >= 1 and episode_num not in confirmed_episodes:
+                        confirmed_episodes.append(episode_num)
+                        logger.info(f"Found episode {episode_num} in torrent: {torrent_title}")
     
     confirmed_episodes.sort()
     logger.info(f"Extracted {len(confirmed_episodes)} confirmed episodes for Season {season_num}: {confirmed_episodes}")
@@ -318,6 +322,9 @@ def update_database_with_confirmed_episodes(movie_title, season_num, confirmed_e
                         new_confirmed = []
                         
                         for ep in confirmed_episodes:
+                            # Episode IDs start at E01; never persist E00 (can happen due to mis-parsing)
+                            if ep < 1:
+                                continue
                             ep_id = f"E{ep:02d}"
                             if ep_id not in existing_confirmed:
                                 new_confirmed.append(ep_id)
@@ -1412,6 +1419,9 @@ def process_individual_episodes_fallback(driver, movie_title, season_num, normal
     confirmed_seasons = set()
     processed_torrents = set()
     confirmation_flag = False
+    confirmed_episode_ids = set()
+    required_episode_ids = set()
+    required_episode_nums = set()
     
     # For in-progress seasons, we need to check for aired episodes specifically
     from seerr.database import get_db
@@ -1443,6 +1453,16 @@ def process_individual_episodes_fallback(driver, movie_title, season_num, normal
     
     # If we have specific aired episodes, check for each one
     if aired_episodes_list:
+        # These are the episodes we must confirm for the season to be considered successful.
+        for ep in aired_episodes_list:
+            try:
+                ep_num = int(str(ep).replace('E', ''))
+                if ep_num >= 1:
+                    required_episode_nums.add(ep_num)
+                    required_episode_ids.add(f"E{ep_num:02d}")
+            except (ValueError, AttributeError):
+                logger.warning(f"Could not parse required episode number from '{ep}'")
+
         for episode in aired_episodes_list:
             # Check if item is still in queue before processing each episode
             if tmdb_id and _check_queue_status(tmdb_id, 'tv'):
@@ -1508,7 +1528,7 @@ def process_individual_episodes_fallback(driver, movie_title, season_num, normal
             )
             
             if episode_confirmed:
-                confirmation_flag = True
+                confirmed_episode_ids.add(episode_id)
                 logger.info(f"Episode {full_episode_id} already cached at RD (100%). Marking as confirmed.")
                 # Update database immediately with confirmed episode
                 if USE_DATABASE:
@@ -1615,8 +1635,8 @@ def process_individual_episodes_fallback(driver, movie_title, season_num, normal
                                         rd_button_text = rd_button.text
                                         if "RD (100%)" in rd_button_text:
                                             logger.success(f"RD (100%) confirmed for {full_episode_id}. Episode fully processed.")
-                                            confirmation_flag = True
                                             processed_torrents.add(title_text)
+                                            confirmed_episode_ids.add(episode_id)
                                             break
                                         elif "RD (0%)" in rd_button_text:
                                             logger.warning(f"RD (0%) detected for {full_episode_id}. Undoing and skipping.")
@@ -1630,8 +1650,8 @@ def process_individual_episodes_fallback(driver, movie_title, season_num, normal
                                         search_phrase = normalize_title_for_library_search(movie_title, full_episode_id)
                                         if check_torrent_in_dmm_library(driver, search_phrase):
                                             logger.success(f"RD status timed out but '{search_phrase}' found in library. Marking as complete.")
-                                            confirmation_flag = True
                                             processed_torrents.add(title_text)
+                                            confirmed_episode_ids.add(episode_id)
                                             episode_confirmed = True
                                             break
                                         logger.warning(f"'{search_phrase}' not in library after timeout. Retrying with next result.")
@@ -1754,6 +1774,7 @@ def process_individual_episodes_fallback(driver, movie_title, season_num, normal
         )
     
     if confirmation_flag:
+        # This branch is only used when we did not have an explicit aired/unprocessed episode list.
         logger.info(f"Season {season_num} confirmed with individual episodes")
         logger.info(f"Total processed torrents collected: {len(processed_torrents)} - {list(processed_torrents)}")
         
@@ -1767,6 +1788,28 @@ def process_individual_episodes_fallback(driver, movie_title, season_num, normal
         
         return True
     else:
+        # If we had a known aired/unprocessed list, require all of those episodes to be confirmed.
+        if required_episode_ids:
+            all_required_confirmed = required_episode_ids.issubset(confirmed_episode_ids)
+            if all_required_confirmed:
+                logger.info(f"Season {season_num} fully confirmed (all required episodes processed).")
+                
+                # In the DB we already updated episode confirmations as we went.
+                # Extract/update is kept as a best-effort backfill, but constrained to expected episodes.
+                confirmed_episodes = extract_episodes_from_torrents(driver, movie_title, season_num, processed_torrents)
+                if confirmed_episodes:
+                    filtered = [ep for ep in confirmed_episodes if ep in required_episode_nums]
+                    if filtered:
+                        logger.info(f"Backfilling extracted episodes (filtered to required): {filtered}")
+                        update_database_with_confirmed_episodes(movie_title, season_num, filtered)
+                    else:
+                        logger.warning("Extracted episodes did not match required episode set; skipping DB backfill.")
+                return True
+
+            missing = sorted(list(required_episode_ids - confirmed_episode_ids))
+            logger.warning(f"Season {season_num} not fully confirmed. Missing: {missing}")
+            return False
+        
         logger.warning(f"Season {season_num} not confirmed - no matching individual episodes found")
         return False
 
