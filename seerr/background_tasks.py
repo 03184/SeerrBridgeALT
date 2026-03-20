@@ -1250,7 +1250,7 @@ async def process_movie_queue():
                         
                         # Handle search result - if True, item completed successfully
                         if search_result == True:
-                            if mark_completed(media_id, tmdb_id):
+                            if await asyncio.to_thread(mark_completed, media_id, tmdb_id):
                                 log_info("Overseerr Update", f"Marked {movie_title} ({media_id}) as completed in Overseerr", module="background_tasks", function="process_movie_queue")
                                 
                                 # Update database status to completed
@@ -1505,7 +1505,7 @@ async def process_tv_queue():
                                 continue
                             
                             # Proceed with marking as available and updating database
-                            if mark_completed(media_id, tmdb_id):
+                            if await asyncio.to_thread(mark_completed, media_id, tmdb_id):
                                 log_info("Overseerr Update", f"Marked {movie_title} ({media_id}) as completed in Overseerr", module="background_tasks", function="process_tv_queue")
                                 
                                 # Update database status to completed

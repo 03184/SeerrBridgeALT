@@ -11,6 +11,9 @@ from seerr import config
 from seerr.database import get_db
 from seerr.unified_media_manager import track_media_request, update_media_request_status, get_media_by_tmdb
 from seerr.unified_models import UnifiedMedia
+
+# Use explicit connect/read timeouts to avoid indefinite hangs.
+OVERSEERR_HTTP_TIMEOUT = (5, 30)
 from seerr.db_logger import log_info, log_success, log_error
 
 def aggregate_tv_requests_by_media_id(requests: list[dict]) -> list[dict]:
@@ -112,7 +115,7 @@ def get_overseerr_media_requests() -> list[dict]:
     # API request logging
     
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=OVERSEERR_HTTP_TIMEOUT)
         
         if response.status_code != 200:
             logger.error(f"Failed to fetch requests from Overseerr: {response.status_code}")
@@ -169,7 +172,7 @@ def get_all_overseerr_requests_for_media(overseerr_media_id: int) -> list[dict]:
     }
     
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=OVERSEERR_HTTP_TIMEOUT)
         
         if response.status_code != 200:
             logger.error(f"Failed to fetch all requests from Overseerr: {response.status_code}")
@@ -213,7 +216,7 @@ def get_media_id_from_request_id(request_id: int) -> Optional[int]:
     }
     
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=OVERSEERR_HTTP_TIMEOUT)
         
         if response.status_code != 200:
             logger.error(f"Failed to fetch request {request_id} from Overseerr: {response.status_code}")
@@ -260,7 +263,7 @@ def mark_completed(media_id: int, tmdb_id: int) -> bool:
     data = {"is4k": False}
     
     try:
-        response = requests.post(url, headers=headers, json=data)
+        response = requests.post(url, headers=headers, json=data, timeout=OVERSEERR_HTTP_TIMEOUT)
         response_data = response.json()  # Parse the JSON response
         
         if response.status_code == 200:
@@ -274,6 +277,9 @@ def mark_completed(media_id: int, tmdb_id: int) -> bool:
         else:
             logger.error(f"Failed to mark media as completed in overseerr with id {media_id}: Status code {response.status_code}, Response: {response_data}")
             return False
+    except requests.exceptions.Timeout as e:
+        logger.error(f"Timed out while marking media as completed in overseerr with id {media_id}: {str(e)}")
+        return False
     except requests.exceptions.RequestException as e:
         logger.error(f"Failed to mark media as completed in overseerr with id {media_id}: {str(e)}")
         return False
