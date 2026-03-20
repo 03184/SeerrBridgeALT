@@ -78,12 +78,6 @@ export default defineEventHandler(async (event) => {
         safeEnvVars.failed_item_retry_interval_minutes = val
       }
     }
-    if (process.env.FAILED_ITEM_MAX_RETRY_ATTEMPTS) {
-      const val = parseInt(process.env.FAILED_ITEM_MAX_RETRY_ATTEMPTS, 10)
-      if (!isNaN(val)) {
-        safeEnvVars.failed_item_max_retry_attempts = val
-      }
-    }
     if (process.env.FAILED_ITEM_RETRY_DELAY_HOURS) {
       const val = parseInt(process.env.FAILED_ITEM_RETRY_DELAY_HOURS, 10)
       if (!isNaN(val)) {

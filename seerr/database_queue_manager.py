@@ -19,7 +19,6 @@ class DatabaseQueueManager:
     """Manages queuing of existing database items that need processing"""
     
     def __init__(self):
-        self.max_retry_attempts = 3
         self.retry_delay_hours = 2
     
     async def queue_existing_items_for_processing(self):

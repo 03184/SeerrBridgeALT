@@ -10,7 +10,6 @@ export default defineEventHandler(async (event) => {
     const failedItemConfigKeys = [
       'enable_failed_item_retry',
       'failed_item_retry_interval_minutes',
-      'failed_item_max_retry_attempts',
       'failed_item_retry_delay_hours',
       'failed_item_retry_backoff_multiplier',
       'failed_item_max_retry_delay_hours'
@@ -53,7 +52,6 @@ export default defineEventHandler(async (event) => {
       const descriptions: Record<string, string> = {
         'enable_failed_item_retry': 'Enable or disable the automatic retry of failed media items',
         'failed_item_retry_interval_minutes': 'Interval in minutes between failed item retry checks',
-        'failed_item_max_retry_attempts': 'Maximum number of retry attempts for failed items',
         'failed_item_retry_delay_hours': 'Initial delay in hours before the first retry attempt',
         'failed_item_retry_backoff_multiplier': 'Multiplier for the retry delay (e.g., 2 for exponential backoff: 2h, 4h, 8h)',
         'failed_item_max_retry_delay_hours': 'Maximum delay in hours between retry attempts for a failed item'
@@ -73,8 +71,7 @@ export default defineEventHandler(async (event) => {
         COUNT(CASE WHEN is_in_queue = 1 THEN 1 END) as queued_for_retry,
         COUNT(CASE WHEN last_error_at > DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 END) as failed_last_24h,
         AVG(error_count) as avg_error_count,
-        MAX(error_count) as max_error_count,
-        COUNT(CASE WHEN error_count >= 3 THEN 1 END) as max_retries_reached
+        MAX(error_count) as max_error_count
       FROM unified_media
       WHERE status = 'failed' AND error_message IS NOT NULL AND error_count > 0
     `
@@ -107,7 +104,6 @@ export default defineEventHandler(async (event) => {
       config: {
         enable_failed_item_retry: configs.enable_failed_item_retry?.value ?? true,
         failed_item_retry_interval_minutes: configs.failed_item_retry_interval_minutes?.value ?? 30,
-        failed_item_max_retry_attempts: configs.failed_item_max_retry_attempts?.value ?? 3,
         failed_item_retry_delay_hours: configs.failed_item_retry_delay_hours?.value ?? 2,
         failed_item_retry_backoff_multiplier: configs.failed_item_retry_backoff_multiplier?.value ?? 2,
         failed_item_max_retry_delay_hours: configs.failed_item_max_retry_delay_hours?.value ?? 24
@@ -119,14 +115,12 @@ export default defineEventHandler(async (event) => {
         queued_for_retry: stats.queued_for_retry || 0,
         failed_last_24h: stats.failed_last_24h || 0,
         avg_error_count: Math.round((stats.avg_error_count || 0) * 10) / 10,
-        max_error_count: stats.max_error_count || 0,
-        max_retries_reached: stats.max_retries_reached || 0
+        max_error_count: stats.max_error_count || 0
       },
       retry_schedule: retrySchedule,
       config_descriptions: {
         enable_failed_item_retry: 'Enable or disable the automatic retry of failed media items',
         failed_item_retry_interval_minutes: 'Interval in minutes between failed item retry checks',
-        failed_item_max_retry_attempts: 'Maximum number of retry attempts for failed items',
         failed_item_retry_delay_hours: 'Initial delay in hours before the first retry attempt',
         failed_item_retry_backoff_multiplier: 'Multiplier for the retry delay (exponential backoff)',
         failed_item_max_retry_delay_hours: 'Maximum delay in hours between retry attempts'

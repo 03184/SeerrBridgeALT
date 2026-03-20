@@ -28,7 +28,6 @@ CONFIG_KEY_TO_ENV = {
     'tv_queue_maxsize': 'TV_QUEUE_MAXSIZE',
     'enable_failed_item_retry': 'ENABLE_FAILED_ITEM_RETRY',
     'failed_item_retry_interval_minutes': 'FAILED_ITEM_RETRY_INTERVAL_MINUTES',
-    'failed_item_max_retry_attempts': 'FAILED_ITEM_MAX_RETRY_ATTEMPTS',
     'failed_item_retry_delay_hours': 'FAILED_ITEM_RETRY_DELAY_HOURS',
     'failed_item_retry_backoff_multiplier': 'FAILED_ITEM_RETRY_BACKOFF_MULTIPLIER',
     'failed_item_max_retry_delay_hours': 'FAILED_ITEM_MAX_RETRY_DELAY_HOURS',

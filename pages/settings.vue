@@ -715,34 +715,18 @@
             </div>
           </div>
           
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            <div>
-              <label class="block text-xs sm:text-sm font-medium text-foreground mb-1.5 sm:mb-2">
-                Retry Interval (minutes)
-              </label>
-              <input
-                v-model.number="failedItemsConfig.failed_item_retry_interval_minutes"
-                type="number"
-                min="1"
-                max="1440"
-                class="w-full px-3 py-2 text-xs sm:text-sm glass-input rounded-lg"
-              />
-              <p class="text-[10px] sm:text-xs text-muted-foreground mt-1">Interval between failed item retry checks</p>
-            </div>
-            
-            <div>
-              <label class="block text-xs sm:text-sm font-medium text-foreground mb-1.5 sm:mb-2">
-                Max Retry Attempts
-              </label>
-              <input
-                v-model.number="failedItemsConfig.failed_item_max_retry_attempts"
-                type="number"
-                min="1"
-                max="10"
-                class="w-full px-3 py-2 text-xs sm:text-sm glass-input rounded-lg"
-              />
-              <p class="text-[10px] sm:text-xs text-muted-foreground mt-1">Maximum number of retry attempts for failed items</p>
-            </div>
+          <div>
+            <label class="block text-xs sm:text-sm font-medium text-foreground mb-1.5 sm:mb-2">
+              Retry Interval (minutes)
+            </label>
+            <input
+              v-model.number="failedItemsConfig.failed_item_retry_interval_minutes"
+              type="number"
+              min="1"
+              max="1440"
+              class="w-full px-3 py-2 text-xs sm:text-sm glass-input rounded-lg"
+            />
+            <p class="text-[10px] sm:text-xs text-muted-foreground mt-1">Interval between failed item retry checks</p>
           </div>
           
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
@@ -880,7 +864,6 @@ const taskConfig = ref({
 const failedItemsConfig = ref({
   enable_failed_item_retry: true,
   failed_item_retry_interval_minutes: 30,
-  failed_item_max_retry_attempts: 3,
   failed_item_retry_delay_hours: 2,
   failed_item_retry_backoff_multiplier: 2,
   failed_item_max_retry_delay_hours: 24
@@ -1621,7 +1604,6 @@ const resetToDefaults = () => {
     failedItemsConfig.value = {
       enable_failed_item_retry: true,
       failed_item_retry_interval_minutes: 30,
-      failed_item_max_retry_attempts: 3,
       failed_item_retry_delay_hours: 2,
       failed_item_retry_backoff_multiplier: 2,
       failed_item_max_retry_delay_hours: 24
@@ -1660,7 +1642,6 @@ const getConfigDescription = (key) => {
     tv_queue_maxsize: 'TV queue maximum size',
     enable_failed_item_retry: 'Enable failed item retry',
     failed_item_retry_interval_minutes: 'Failed item retry interval in minutes',
-    failed_item_max_retry_attempts: 'Maximum retry attempts for failed items',
     failed_item_retry_delay_hours: 'Initial retry delay in hours',
     failed_item_retry_backoff_multiplier: 'Retry backoff multiplier',
     failed_item_max_retry_delay_hours: 'Maximum retry delay in hours'

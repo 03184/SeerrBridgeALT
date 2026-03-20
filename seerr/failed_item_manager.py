@@ -2,11 +2,8 @@
 Failed Item Manager for SeerrBridge
 Handles retry logic for failed movies and TV shows
 """
-import time
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional, Tuple
-from sqlalchemy.orm import Session
-from loguru import logger
+from typing import List, Dict, Any, Optional
 
 from seerr.database import get_db
 from seerr.unified_models import UnifiedMedia
@@ -18,29 +15,17 @@ class FailedItemManager:
     """Manages retry logic for failed media items"""
     
     def __init__(self):
-        # Load config values with defaults - will be set via _refresh_config for consistency
-        self.max_retry_attempts = 3
         self.retry_delay_hours = 2
         self.retry_backoff_multiplier = 2.0
         self.max_retry_delay_hours = 24
-        # Refresh config to load actual values from database
         self._refresh_config()
     
     def _refresh_config(self):
         """Refresh config values from task_config (call this periodically or when config changes)"""
-        # Get config values with defaults
-        max_retry_attempts = task_config.get_config('failed_item_max_retry_attempts', 3)
         retry_delay_hours = task_config.get_config('failed_item_retry_delay_hours', 2)
         retry_backoff_multiplier = task_config.get_config('failed_item_retry_backoff_multiplier', 2)
         max_retry_delay_hours = task_config.get_config('failed_item_max_retry_delay_hours', 24)
         
-        # Defensive type conversion to ensure numeric types (handles cases where config returns strings)
-        try:
-            # Allow 0 or negative for infinite retries
-            self.max_retry_attempts = int(max_retry_attempts) if max_retry_attempts is not None else 3
-        except (ValueError, TypeError):
-            self.max_retry_attempts = 3
-            
         try:
             self.retry_delay_hours = int(retry_delay_hours) if retry_delay_hours is not None else 2
         except (ValueError, TypeError):
@@ -57,31 +42,33 @@ class FailedItemManager:
         except (ValueError, TypeError):
             self.max_retry_delay_hours = 24
     
-    def get_failed_movies(self, limit: int = 50) -> List[UnifiedMedia]:
-        """Get failed movies that are eligible for retry"""
-        # Refresh config to get latest values
+    def get_failed_movies(
+        self,
+        limit: Optional[int] = 50,
+        apply_retry_backoff: bool = True,
+    ) -> List[UnifiedMedia]:
+        """Get failed movies. When apply_retry_backoff is True, only those past the backoff window."""
         self._refresh_config()
         db = get_db()
         try:
-            # Get movies that have failed and haven't exceeded retry limits
-            # If max_retry_attempts is 0 or negative, allow infinite retries
             query = db.query(UnifiedMedia).filter(
                 UnifiedMedia.media_type == 'movie',
                 UnifiedMedia.status == 'failed',
-                UnifiedMedia.last_error_at.isnot(None)
+                UnifiedMedia.last_error_at.isnot(None),
             )
-            # Only filter by max_retry_attempts if it's a positive number (infinite retries if 0 or negative)
-            if self.max_retry_attempts > 0:
-                query = query.filter(UnifiedMedia.error_count < self.max_retry_attempts)
-            
-            failed_movies = query.order_by(UnifiedMedia.last_error_at.asc()).limit(limit).all()
-            
-            # Filter by retry delay
+            query = query.order_by(UnifiedMedia.last_error_at.asc())
+            if limit is not None:
+                query = query.limit(limit)
+            failed_movies = query.all()
+
+            if not apply_retry_backoff:
+                return failed_movies
+
             eligible_movies = []
             for movie in failed_movies:
                 if self._is_eligible_for_retry(movie):
                     eligible_movies.append(movie)
-            
+
             return eligible_movies
         except Exception as e:
             log_error("Failed Item Manager", f"Error getting failed movies: {e}", 
@@ -90,31 +77,33 @@ class FailedItemManager:
         finally:
             db.close()
     
-    def get_failed_tv_shows(self, limit: int = 50) -> List[UnifiedMedia]:
-        """Get failed TV shows that are eligible for retry"""
-        # Refresh config to get latest values
+    def get_failed_tv_shows(
+        self,
+        limit: Optional[int] = 50,
+        apply_retry_backoff: bool = True,
+    ) -> List[UnifiedMedia]:
+        """Get failed TV shows. When apply_retry_backoff is True, only those past the backoff window."""
         self._refresh_config()
         db = get_db()
         try:
-            # Get TV shows that have failed and haven't exceeded retry limits
-            # If max_retry_attempts is 0 or negative, allow infinite retries
             query = db.query(UnifiedMedia).filter(
                 UnifiedMedia.media_type == 'tv',
                 UnifiedMedia.status == 'failed',
-                UnifiedMedia.last_error_at.isnot(None)
+                UnifiedMedia.last_error_at.isnot(None),
             )
-            # Only filter by max_retry_attempts if it's a positive number (infinite retries if 0 or negative)
-            if self.max_retry_attempts > 0:
-                query = query.filter(UnifiedMedia.error_count < self.max_retry_attempts)
-            
-            failed_shows = query.order_by(UnifiedMedia.last_error_at.asc()).limit(limit).all()
-            
-            # Filter by retry delay
+            query = query.order_by(UnifiedMedia.last_error_at.asc())
+            if limit is not None:
+                query = query.limit(limit)
+            failed_shows = query.all()
+
+            if not apply_retry_backoff:
+                return failed_shows
+
             eligible_shows = []
             for show in failed_shows:
                 if self._is_eligible_for_retry(show):
                     eligible_shows.append(show)
-            
+
             return eligible_shows
         except Exception as e:
             log_error("Failed Item Manager", f"Error getting failed TV shows: {e}", 
@@ -310,8 +299,9 @@ async def process_failed_items():
         log_info("Failed Item Processing", "Starting failed item processing", 
                 module="failed_item_manager", function="process_failed_items")
         
-        # Get failed movies and TV shows
-        failed_movies = failed_item_manager.get_failed_movies(limit=10)  # Process 10 at a time
+        # Failed items: no error_count cap anymore, but keep the existing backoff gating/limit behavior
+        # so we don't spam Overseerr availability checks every run.
+        failed_movies = failed_item_manager.get_failed_movies(limit=10)
         failed_tv_shows = failed_item_manager.get_failed_tv_shows(limit=10)
         
         retry_count = 0

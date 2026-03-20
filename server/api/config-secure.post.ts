@@ -33,7 +33,7 @@ export default defineEventHandler(async (event) => {
       'enable_show_subscription_task', 'token_refresh_interval_minutes',
       'movie_processing_check_interval_minutes', 'movie_queue_maxsize', 'tv_queue_maxsize',
       'enable_failed_item_retry', 'failed_item_retry_interval_minutes',
-      'failed_item_max_retry_attempts', 'failed_item_retry_delay_hours',
+      'failed_item_retry_delay_hours',
       'failed_item_retry_backoff_multiplier', 'failed_item_max_retry_delay_hours'
     ]
     

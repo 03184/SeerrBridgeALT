@@ -9,7 +9,6 @@ export default defineEventHandler(async (event) => {
     const {
       enable_failed_item_retry,
       failed_item_retry_interval_minutes,
-      failed_item_max_retry_attempts,
       failed_item_retry_delay_hours,
       failed_item_retry_backoff_multiplier,
       failed_item_max_retry_delay_hours
@@ -19,7 +18,6 @@ export default defineEventHandler(async (event) => {
     const configs = [
       { key: 'enable_failed_item_retry', value: enable_failed_item_retry, type: 'boolean' },
       { key: 'failed_item_retry_interval_minutes', value: failed_item_retry_interval_minutes, type: 'integer', min: 1, max: 1440 },
-      { key: 'failed_item_max_retry_attempts', value: failed_item_max_retry_attempts, type: 'integer', min: 1, max: 10 },
       { key: 'failed_item_retry_delay_hours', value: failed_item_retry_delay_hours, type: 'integer', min: 1, max: 168 },
       { key: 'failed_item_retry_backoff_multiplier', value: failed_item_retry_backoff_multiplier, type: 'integer', min: 1, max: 10 },
       { key: 'failed_item_max_retry_delay_hours', value: failed_item_max_retry_delay_hours, type: 'integer', min: 1, max: 168 }

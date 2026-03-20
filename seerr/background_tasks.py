@@ -331,25 +331,16 @@ async def initialize_background_tasks():
     try:
         # On first boot, immediately check for stuck items
         await check_stuck_items_on_startup()
-        
-        # Try to fill in missing Trakt IDs (e.g. future titles that appear on Trakt later)
-        await refresh_missing_trakt_ids()
 
-        # Promote failed episodes -> unprocessed at event start (so retries happen only on events)
-        await promote_failed_tv_episodes_for_retry()
-        
-        # One-time population from Overseerr so new requests get one startup pass (no interval; next population is 3am or manual)
-        await populate_queues_from_overseerr()
+        # Same pipeline as 3am, plus Overseerr sync once (next unified pass without Overseerr is 3am)
+        await run_processing_event_maintenance(sync_overseerr=True)
 
-        # Populate from unified_media for any processing items (including episodes_pending) after promotions/recompute
-        await populate_queues_from_unified_media()
-        
-        # On first boot, immediately check for failed items
+        # Mark failed items complete in Overseerr when already available (no cap on error_count)
         from seerr.failed_item_manager import process_failed_items
         log_info("Failed Item Processing", "Checking failed items on startup...", module="background_tasks", function="init_background_tasks")
         retry_count = await process_failed_items()
         log_info("Failed Item Processing", f"Startup check: Processed {retry_count} failed items", module="background_tasks", function="init_background_tasks")
-        
+
         scheduler.start()
     finally:
         task_config.set_config('processing_event_active', False, config_type='bool')
@@ -531,6 +522,23 @@ async def promote_failed_tv_episodes_for_retry():
         db.close()
 
 
+async def run_processing_event_maintenance(*, sync_overseerr: bool = False):
+    """
+    Shared body for the daily 3am job and application startup (same order as 3am).
+    Trakt ID refresh → promote failed TV episodes → movie recheck (unreleased / failed / stuck)
+    → optional Overseerr queue population (startup only) → full TV maintenance (ends with
+    populate_queues_from_unified_media).
+    """
+    if not USE_DATABASE:
+        return
+    await refresh_missing_trakt_ids()
+    await promote_failed_tv_episodes_for_retry()
+    await daily_3am_movie_recheck()
+    if sync_overseerr:
+        await populate_queues_from_overseerr()
+    await daily_3am_tv_maintenance()
+
+
 async def daily_3am_maintenance():
     """
     Single 3am job: wait for queue idle, then movie recheck, then TV maintenance.
@@ -541,10 +549,7 @@ async def daily_3am_maintenance():
     await queue_processing_complete.wait()
     task_config.set_config('processing_event_active', True, config_type='bool')
     try:
-        await refresh_missing_trakt_ids()
-        await promote_failed_tv_episodes_for_retry()
-        await daily_3am_movie_recheck()
-        await daily_3am_tv_maintenance()
+        await run_processing_event_maintenance(sync_overseerr=False)
     finally:
         task_config.set_config('processing_event_active', False, config_type='bool')
 

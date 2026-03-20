@@ -597,7 +597,6 @@ VALUES
     -- Failed Item Retry Configuration
     ('enable_failed_item_retry', 'true', 'boolean', 'Enable automatic retry of failed movies and TV shows', TRUE),
     ('failed_item_retry_interval_minutes', '30', 'integer', 'Interval in minutes between failed item retry checks', TRUE),
-    ('failed_item_max_retry_attempts', '3', 'integer', 'Maximum number of retry attempts for failed items', TRUE),
     ('failed_item_retry_delay_hours', '2', 'integer', 'Initial delay in hours before first retry attempt', TRUE),
     ('failed_item_retry_backoff_multiplier', '2', 'integer', 'Multiplier for retry delay (exponential backoff)', TRUE),
     ('failed_item_max_retry_delay_hours', '24', 'integer', 'Maximum delay in hours between retry attempts', TRUE),

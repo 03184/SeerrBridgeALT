@@ -630,16 +630,6 @@
                       />
                     </div>
                     <div>
-                      <label class="block text-sm font-medium text-foreground">Max Retry Attempts</label>
-                      <input
-                        v-model.number="config.failed_item_max_retry_attempts"
-                        type="number"
-                        min="1"
-                        max="10"
-                        class="mt-1 block w-full border border-input rounded-md shadow-sm bg-background text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-ring focus:border-ring"
-                      />
-                    </div>
-                    <div>
                       <label class="block text-sm font-medium text-foreground">Initial Retry Delay (hours)</label>
                       <input
                         v-model.number="config.failed_item_retry_delay_hours"
@@ -825,7 +815,6 @@ const config = ref({
   // Failed Items Configuration
   enable_failed_item_retry: true,
   failed_item_retry_interval_minutes: 30,
-  failed_item_max_retry_attempts: 3,
   failed_item_retry_delay_hours: 2,
   failed_item_retry_backoff_multiplier: 2,
   failed_item_max_retry_delay_hours: 24
@@ -958,9 +947,6 @@ const loadConfigFromEnv = async () => {
       }
       if (safeValues.failed_item_retry_interval_minutes !== undefined) {
         config.value.failed_item_retry_interval_minutes = safeValues.failed_item_retry_interval_minutes
-      }
-      if (safeValues.failed_item_max_retry_attempts !== undefined) {
-        config.value.failed_item_max_retry_attempts = safeValues.failed_item_max_retry_attempts
       }
       if (safeValues.failed_item_retry_delay_hours !== undefined) {
         config.value.failed_item_retry_delay_hours = safeValues.failed_item_retry_delay_hours

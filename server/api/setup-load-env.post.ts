@@ -26,7 +26,6 @@ export default defineEventHandler(async (event) => {
       'TV_QUEUE_MAXSIZE': { key: 'tv_queue_maxsize', type: 'int', description: 'TV queue maximum size' },
       'ENABLE_FAILED_ITEM_RETRY': { key: 'enable_failed_item_retry', type: 'bool', description: 'Enable failed item retry' },
       'FAILED_ITEM_RETRY_INTERVAL_MINUTES': { key: 'failed_item_retry_interval_minutes', type: 'int', description: 'Failed item retry interval in minutes' },
-      'FAILED_ITEM_MAX_RETRY_ATTEMPTS': { key: 'failed_item_max_retry_attempts', type: 'int', description: 'Maximum retry attempts for failed items' },
       'FAILED_ITEM_RETRY_DELAY_HOURS': { key: 'failed_item_retry_delay_hours', type: 'int', description: 'Initial retry delay in hours' },
       'FAILED_ITEM_RETRY_BACKOFF_MULTIPLIER': { key: 'failed_item_retry_backoff_multiplier', type: 'float', description: 'Retry backoff multiplier' },
       'FAILED_ITEM_MAX_RETRY_DELAY_HOURS': { key: 'failed_item_max_retry_delay_hours', type: 'int', description: 'Maximum retry delay in hours' }
@@ -85,7 +84,6 @@ export default defineEventHandler(async (event) => {
       'TV_QUEUE_MAXSIZE',
       'ENABLE_FAILED_ITEM_RETRY',
       'FAILED_ITEM_RETRY_INTERVAL_MINUTES',
-      'FAILED_ITEM_MAX_RETRY_ATTEMPTS',
       'FAILED_ITEM_RETRY_DELAY_HOURS',
       'FAILED_ITEM_RETRY_BACKOFF_MULTIPLIER',
       'FAILED_ITEM_MAX_RETRY_DELAY_HOURS'
