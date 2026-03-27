@@ -594,10 +594,19 @@ if __name__ == "__main__":
     log_status(f"Process initiated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", "info")
     
     # Step 1: Wait for database to be ready
-    log_status("Step 1/3: Waiting for MySQL database to be ready...", "info")
-    if not wait_for_database():
-        log_status("Startup failed: Database not ready", "error")
-        sys.exit(1)
+    db_type = os.environ.get('DB_TYPE', 'sqlite').lower()
+    if db_type == 'mysql':
+        log_status("Step 1/3: Waiting for MySQL database to be ready...", "info")
+        if not wait_for_database():
+            log_status("Startup failed: Database not ready", "error")
+            sys.exit(1)
+    else:
+        log_status("Step 1/3: Using SQLite database, skipping MySQL check", "info")
+        db_path = os.environ.get('DB_PATH', 'seerrbridge.db')
+        if os.path.exists(db_path):
+            log_status(f"SQLite database found at {db_path}", "success")
+        else:
+            log_status(f"SQLite database not found at {db_path}, it will be created on startup", "info")
     
     # Start the setup API server in a separate thread
     api_thread = threading.Thread(target=start_setup_api_server, daemon=True)

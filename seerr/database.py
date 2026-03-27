@@ -13,6 +13,7 @@ from sqlalchemy.dialects.mysql import LONGTEXT
 from loguru import logger
 
 # Database configuration
+DB_TYPE = os.getenv('DB_TYPE', 'sqlite').lower()
 DB_HOST = os.getenv('DB_HOST', 'localhost')
 DB_PORT = os.getenv('DB_PORT', '3306')
 DB_NAME = os.getenv('DB_NAME', 'seerrbridge')
@@ -20,12 +21,23 @@ DB_USER = os.getenv('DB_USER', 'seerrbridge')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'seerrbridge')
 
 # Create database URL
-DATABASE_URL = "sqlite:///seerrbridge.db"
+if DB_TYPE == 'mysql':
+    # Use pymysql for MySQL/MariaDB connections
+    DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    connect_args = {}
+    # Re-importing these if mysql is used to ensure they are available
+    # although they are already imported at the top
+else:
+    # Default to SQLite
+    # In Docker, we might want a persistent path for the sqlite db
+    DB_PATH = os.getenv('DB_PATH', 'seerrbridge.db')
+    DATABASE_URL = f"sqlite:///{DB_PATH}"
+    connect_args = {"check_same_thread": False}
 
 # Create engine with proper connection pooling for async/concurrent access
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False},
+    connect_args=connect_args,
     echo=False  # Set to True for SQL debugging
 )
 
