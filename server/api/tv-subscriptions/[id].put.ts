@@ -46,7 +46,7 @@ export default defineEventHandler(async (event) => {
       })
     }
     
-    updateFields.push('updated_at = NOW()')
+    updateFields.push('updated_at = CURRENT_TIMESTAMP')
     updateValues.push(id)
     
     const query = `

@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
     // Update the subscription status to inactive instead of deleting
     const [result] = await db.execute(`
       UPDATE unified_media 
-      SET is_subscribed = 0, subscription_active = 0, updated_at = NOW()
+      SET is_subscribed = 0, subscription_active = 0, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND media_type = 'tv'
     `, [id])
     

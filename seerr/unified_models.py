@@ -197,30 +197,43 @@ class UnifiedMedia(Base):
     
     def get_display_status(self) -> str:
         """Get a user-friendly display status"""
-        if self.media_type == 'tv' and self.is_subscribed:
-            # Calculate from seasons_data
+        if self.media_type == 'tv':
+            # Calculate stats from seasons_data for all TV shows
             confirmed_count = 0
             aired_count = 0
             failed_count = 0
+            unprocessed_count = 0
             
             if self.seasons_data:
                 for season in self.seasons_data:
                     if isinstance(season, dict):
-                        confirmed_count += len(season.get('confirmed_episodes', []))
-                        aired_count += season.get('aired_episodes', 0)
-                        failed_count += len(season.get('failed_episodes', []))
+                        confirmed_count += len(season.get('confirmed_episodes', []) or [])
+                        aired_count += int(season.get('aired_episodes', 0) or 0)
+                        failed_count += len(season.get('failed_episodes', []) or [])
+                        unprocessed_count += len(season.get('unprocessed_episodes', []) or [])
             
-            if aired_count > 0 and confirmed_count >= aired_count:
-                return 'completed'
-            elif confirmed_count > 0:
-                return f'{confirmed_count}/{aired_count}'
-            elif failed_count > 0:
-                return 'failed'
-            elif self.status == 'processing':
-                return 'processing'
-            else:
+            # Detailed status mapping
+            if aired_count > 0:
+                if confirmed_count >= aired_count:
+                    return 'completed'
+                if confirmed_count > 0:
+                    # Show progress e.g. "12/24"
+                    status_str = f'{confirmed_count}/{aired_count}'
+                    if failed_count > 0:
+                        status_str += ' (partial)'
+                    return status_str
+                if failed_count > 0 and unprocessed_count == 0:
+                    # Truly failed: everything that aired was attempted and failed
+                    return 'failed'
+                if self.status == 'processing' or unprocessed_count > 0:
+                    return 'processing'
+            
+            # Fallback for shows with no aired episodes or no stats
+            if self.status == 'unreleased':
+                return 'unreleased'
+            if self.status == 'pending':
                 return 'pending'
-        
+            
         return self.status
     
     def get_progress_percentage(self) -> float:

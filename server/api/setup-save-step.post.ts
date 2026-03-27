@@ -18,10 +18,10 @@ export default defineEventHandler(async (event) => {
     // Save the step progress
     await db.execute(`
       INSERT INTO system_config (config_key, config_value, config_type, description, is_active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, true, NOW(), NOW())
+      VALUES (?, ?, ?, ?, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       ON DUPLICATE KEY UPDATE 
         config_value = VALUES(config_value),
-        updated_at = NOW()
+        updated_at = CURRENT_TIMESTAMP
     `, [
       `setup_step_${step}`,
       JSON.stringify({ config, testResults }),
@@ -58,10 +58,10 @@ export default defineEventHandler(async (event) => {
     // Update current step
     await db.execute(`
       INSERT INTO system_config (config_key, config_value, config_type, description, is_active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, true, NOW(), NOW())
+      VALUES (?, ?, ?, ?, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       ON DUPLICATE KEY UPDATE 
         config_value = VALUES(config_value),
-        updated_at = NOW()
+        updated_at = CURRENT_TIMESTAMP
     `, [
       'setup_current_step',
       String(step),

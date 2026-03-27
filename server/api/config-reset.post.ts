@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
     const placeholders = keys.map(() => '?').join(',')
     const [result] = await db.execute(`
       UPDATE system_config 
-      SET config_value = '', updated_at = NOW()
+      SET config_value = '', updated_at = CURRENT_TIMESTAMP
       WHERE config_key IN (${placeholders})
     `, keys)
     

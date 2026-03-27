@@ -62,8 +62,8 @@ export default defineEventHandler(async (event) => {
         processing_stage = 'cancelled',
         error_message = 'Cancelled by user',
         is_in_queue = FALSE,
-        last_checked_at = NOW(),
-        updated_at = NOW()
+        last_checked_at = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `, [mediaRecord.id])
     

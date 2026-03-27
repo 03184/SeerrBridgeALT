@@ -60,7 +60,7 @@ def create_notification(type: str, title: str, message: str, media_id: Optional[
         query = text("""
             INSERT INTO notification_history 
             (id, type, title, message, details, successful, viewed, timestamp, created_at)
-            VALUES (:id, :type, :title, :message, :details, :successful, FALSE, NOW(), NOW())
+            VALUES (:id, :type, :title, :message, :details, :successful, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """)
         
         # Determine if notification represents success
@@ -1027,13 +1027,13 @@ def recompute_tv_show_status(media_id: int) -> bool:
                     has_unaired = True
 
             if has_unprocessed:
-                if processing_event_active:
-                    new_status = 'processing'
-                    new_stage = 'episodes_pending'
-                else:
-                    new_status = 'failed'
-                    new_stage = 'episodes_pending'
+                # If there are unprocessed episodes, the show is 'processing'.
+                # We no longer mark it as 'failed' just because a maintenance event is inactive,
+                # as this incorrectly flags new requests or background processing.
+                new_status = 'processing'
+                new_stage = 'episodes_pending'
             elif has_failed:
+                # Only mark as 'failed' if there is nothing left to process but some episodes failed.
                 new_status = 'failed'
                 new_stage = 'episodes_failed'
             elif has_unaired:

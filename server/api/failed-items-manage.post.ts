@@ -64,9 +64,9 @@ async function retryFailedItems(db: any, media_ids: number[]) {
         error_count = 0,
         last_error_at = NULL,
         is_in_queue = TRUE,
-        queue_added_at = NOW(),
+        queue_added_at = CURRENT_TIMESTAMP,
         queue_attempts = queue_attempts + 1,
-        updated_at = NOW()
+        updated_at = CURRENT_TIMESTAMP
       WHERE id IN (${placeholders})
     `, media_ids)
     
@@ -96,7 +96,7 @@ async function clearErrorStatus(db: any, media_ids: number[]) {
         error_message = NULL,
         error_count = 0,
         last_error_at = NULL,
-        updated_at = NOW()
+        updated_at = CURRENT_TIMESTAMP
       WHERE id IN (${placeholders})
     `, media_ids)
     
@@ -125,7 +125,7 @@ async function resetRetryCount(db: any, media_ids: number[]) {
       SET 
         error_count = 0,
         last_error_at = NULL,
-        updated_at = NOW()
+        updated_at = CURRENT_TIMESTAMP
       WHERE id IN (${placeholders})
     `, media_ids)
     
@@ -153,9 +153,9 @@ async function queueForRetry(db: any, media_ids: number[]) {
       UPDATE unified_media 
       SET 
         is_in_queue = TRUE,
-        queue_added_at = NOW(),
+        queue_added_at = CURRENT_TIMESTAMP,
         queue_attempts = queue_attempts + 1,
-        updated_at = NOW()
+        updated_at = CURRENT_TIMESTAMP
       WHERE id IN (${placeholders})
     `, media_ids)
     
@@ -184,7 +184,7 @@ async function removeFromQueue(db: any, media_ids: number[]) {
       SET 
         is_in_queue = FALSE,
         queue_added_at = NULL,
-        updated_at = NOW()
+        updated_at = CURRENT_TIMESTAMP
       WHERE id IN (${placeholders})
     `, media_ids)
     

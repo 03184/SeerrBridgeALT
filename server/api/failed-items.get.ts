@@ -149,7 +149,7 @@ export default defineEventHandler(async (event) => {
         COUNT(CASE WHEN media_type = 'movie' THEN 1 END) as failed_movies,
         COUNT(CASE WHEN media_type = 'tv' THEN 1 END) as failed_tv_shows,
         COUNT(CASE WHEN is_in_queue = 1 THEN 1 END) as queued_for_retry,
-        COUNT(CASE WHEN last_error_at > DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 END) as failed_last_24h,
+        COUNT(CASE WHEN last_error_at > datetime('now', '-24 hours') THEN 1 END) as failed_last_24h,
         AVG(error_count) as avg_error_count,
         MAX(error_count) as max_error_count
       FROM unified_media

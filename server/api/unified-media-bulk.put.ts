@@ -57,7 +57,7 @@ export default defineEventHandler(async (event) => {
         // Update the status
         const [result] = await db.execute(`
           UPDATE unified_media 
-          SET status = ?, updated_at = NOW()
+          SET status = ?, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
         `, [status, mediaId])
         
