@@ -20,16 +20,12 @@ DB_USER = os.getenv('DB_USER', 'seerrbridge')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'seerrbridge')
 
 # Create database URL
-DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}?charset=utf8mb4"
+DATABASE_URL = "sqlite:///seerrbridge.db"
 
 # Create engine with proper connection pooling for async/concurrent access
 engine = create_engine(
     DATABASE_URL,
-    pool_pre_ping=True,  # Verify connections before using
-    pool_recycle=300,  # Recycle connections after 5 minutes
-    pool_size=10,  # Number of connections to maintain in pool
-    max_overflow=20,  # Maximum overflow connections
-    pool_timeout=30,  # Timeout for getting connection from pool
+    connect_args={"check_same_thread": False},
     echo=False  # Set to True for SQL debugging
 )
 

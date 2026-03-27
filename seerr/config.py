@@ -124,7 +124,7 @@ def load_config(override=False):
         env_path = '.env'
     
     # Load environment variables from .env file
-    load_dotenv(dotenv_path=env_path, override=override)
+    load_dotenv(dotenv_path=env_path, override=override, interpolate=False)
     
     # Load all configuration from environment variables
     RD_ACCESS_TOKEN = os.getenv('RD_ACCESS_TOKEN')

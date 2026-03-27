@@ -83,13 +83,13 @@ def refresh_queue_sizes():
                     # Update movie queue max_size
                     db.execute(text("""
                         UPDATE queue_status 
-                        SET max_size = :max_size, updated_at = NOW()
+                        SET max_size = :max_size, updated_at = CURRENT_TIMESTAMP
                         WHERE queue_type = 'movie'
                     """), {"max_size": new_movie_size})
                     # Update TV queue max_size
                     db.execute(text("""
                         UPDATE queue_status 
-                        SET max_size = :max_size, updated_at = NOW()
+                        SET max_size = :max_size, updated_at = CURRENT_TIMESTAMP
                         WHERE queue_type = 'tv'
                     """), {"max_size": new_tv_size})
                     db.commit()
@@ -3421,6 +3421,7 @@ async def check_stuck_items_on_startup():
                             
                             # If no seasons need processing, we should update the status to completed
                             from seerr.unified_media_manager import update_media_processing_status
+                            from datetime import datetime
                             update_media_processing_status(
                                 tv_show.id,
                                 'completed',

@@ -42,12 +42,12 @@ class QueuePersistenceManager:
                     tv_size = task_config.get_config('tv_queue_maxsize', 250)
                     db.execute(text("""
                         UPDATE queue_status 
-                        SET max_size = :max_size, updated_at = NOW()
+                        SET max_size = :max_size, updated_at = CURRENT_TIMESTAMP
                         WHERE queue_type = 'movie'
                     """), {"max_size": int(movie_size)})
                     db.execute(text("""
                         UPDATE queue_status 
-                        SET max_size = :max_size, updated_at = NOW()
+                        SET max_size = :max_size, updated_at = CURRENT_TIMESTAMP
                         WHERE queue_type = 'tv'
                     """), {"max_size": int(tv_size)})
                     db.commit()
@@ -70,8 +70,8 @@ class QueuePersistenceManager:
             db.execute(text("""
                 INSERT INTO queue_status (queue_type, queue_size, max_size, is_processing, last_activity, created_at, updated_at)
                 VALUES 
-                ('movie', 0, :movie_size, 0, NOW(), NOW(), NOW()),
-                ('tv', 0, :tv_size, 0, NOW(), NOW(), NOW())
+                ('movie', 0, :movie_size, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                ('tv', 0, :tv_size, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             """), {"movie_size": int(movie_size), "tv_size": int(tv_size)})
             db.commit()
             
@@ -127,7 +127,7 @@ class QueuePersistenceManager:
         try:
             db.execute(text("""
                 UPDATE queue_status 
-                SET queue_size = :queue_size, is_processing = :is_processing, last_activity = NOW(), updated_at = NOW()
+                SET queue_size = :queue_size, is_processing = :is_processing, last_activity = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
                 WHERE queue_type = :queue_type
             """), {"queue_size": queue_size, "is_processing": is_processing, "queue_type": queue_type})
             db.commit()
@@ -164,7 +164,7 @@ class QueuePersistenceManager:
             # Update queue_status table
             db.execute(text("""
                 UPDATE queue_status 
-                SET queue_size = :queue_size, is_processing = :is_processing, last_activity = NOW(), updated_at = NOW()
+                SET queue_size = :queue_size, is_processing = :is_processing, last_activity = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
                 WHERE queue_type = :queue_type
             """), {"queue_size": queue_size, "is_processing": is_processing, "queue_type": queue_type})
             db.commit()
