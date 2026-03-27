@@ -318,7 +318,7 @@ export default defineEventHandler(async (event) => {
         COUNT(CASE WHEN media_type = 'movie' THEN 1 END) as total_movies,
         COUNT(CASE WHEN media_type = 'tv' THEN 1 END) as total_tv_shows,
         COUNT(CASE WHEN is_subscribed = TRUE THEN 1 END) as subscribed_count,
-        COUNT(CASE WHEN created_at >= datetime('now', '-24 hours') THEN 1 END) as recent_activity_24h,
+        COUNT(CASE WHEN created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 END) as recent_activity_24h,
         -- Completed items: status = 'completed' in unified_media table
         COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_count,
         COUNT(CASE WHEN status = 'completed' AND media_type = 'movie' THEN 1 END) as movies_completed,
