@@ -11,26 +11,30 @@ log() {
 sleep 3
 
 # Step 1: Wait for MySQL to be running
-log "Waiting for MySQL to be running..."
-for i in {1..30}; do
-    if supervisorctl status mysql | grep -q "RUNNING"; then
-        log "MySQL is running!"
-        break
-    fi
-    if [ $i -eq 30 ]; then
-        log "ERROR: MySQL failed to start"
-        exit 1
-    fi
-    sleep 1
-done
+if [ "$DB_TYPE" = "sqlite" ]; then
+    log "Using SQLite, skipping MySQL startup wait"
+else
+    log "Waiting for MySQL to be running..."
+    for i in {1..30}; do
+        if supervisorctl status mysql | grep -q "RUNNING"; then
+            log "MySQL is running!"
+            break
+        fi
+        if [ $i -eq 30 ]; then
+            log "ERROR: MySQL failed to start"
+            exit 1
+        fi
+        sleep 1
+    done
 
-# Additional wait to ensure MySQL is fully ready
-log "Waiting for MySQL to be fully ready..."
-/app/scripts/wait-for-mysql.sh
+    # Additional wait to ensure MySQL is fully ready
+    log "Waiting for MySQL to be fully ready..."
+    /app/scripts/wait-for-mysql.sh
 
-# Ensure database user exists with correct password (important when DB is already initialized)
-log "Ensuring database user exists with correct password..."
-/app/scripts/ensure-db-user.sh
+    # Ensure database user exists with correct password (important when DB is already initialized)
+    log "Ensuring database user exists with correct password..."
+    /app/scripts/ensure-db-user.sh
+fi
 
 # Step 2: Start frontend
 log "Starting Nuxt frontend..."

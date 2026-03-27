@@ -11,6 +11,12 @@ WAITED=0
 
 echo "[$(date +'%Y-%m-%d %H:%M:%S')] Waiting for MySQL to be ready..."
 
+# Skip if SQLite is used
+if [ "$DB_TYPE" = "sqlite" ]; then
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] Using SQLite, skipping MySQL wait"
+    exit 0
+fi
+
 while [ $WAITED -lt $MAX_WAIT ]; do
     # Try to connect using mysqladmin or mysql command
     if mysqladmin ping -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" --silent 2>/dev/null || \
