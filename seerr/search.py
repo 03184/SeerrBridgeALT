@@ -3242,14 +3242,15 @@ def search_on_debrid(imdb_id, movie_title, media_type, driver, extra_data=None, 
                 if year is not None:
                     try:
                         year_regex = f"({year - 1}|{year}|{year + 1})"
-                        base = (TORRENT_FILTER_REGEX or "").strip()
-                        full_filter = f"{base} {year_regex}".strip() if base else year_regex
+                        # Use only simple resolution and year filter in UI; 
+                        # Python-side regex will handle the complex filtering later
+                        full_filter = f"1080p 720p {year_regex}"
                         filter_input = WebDriverWait(driver, 3).until(
                             EC.presence_of_element_located((By.ID, "query"))
                         )
                         from seerr.background_tasks import type_slowly
                         type_slowly(driver, filter_input, full_filter)
-                        logger.info(f"Applied movie year filter: {full_filter}")
+                        logger.info(f"Applied simple movie year filter to UI: {full_filter}")
                         time.sleep(1)
                     except (TimeoutException, NoSuchElementException) as e:
                         logger.warning(f"Could not apply movie year filter: {e}")
