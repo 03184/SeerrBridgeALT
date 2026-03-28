@@ -7,8 +7,12 @@ log() {
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"
 }
 
-# Wait for supervisor to be ready
-sleep 3
+# Wait for supervisor socket to be ready
+log "Waiting for supervisor socket..."
+while [ ! -S /var/run/supervisor.sock ]; do
+    sleep 0.5
+done
+log "Supervisor socket is ready."
 
 # Step 1: Wait for MySQL to be running
 if [ "$DB_TYPE" = "sqlite" ]; then
