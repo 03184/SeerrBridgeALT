@@ -700,18 +700,18 @@ def relocate_red_buttons(driver, target_index):
         time.sleep(1)
         
         # Re-find all availability buttons (red or green)
-        all_avail_buttons_elements = driver.find_elements(By.XPATH, "//button[contains(., 'RD')]")
+        # We look for buttons containing "RD" or "INSTANT"
+        all_avail = driver.find_elements(By.TAG_NAME, "button")
         avail_buttons_elements = []
-        for button in all_avail_buttons_elements:
+        for button in all_avail:
             try:
-                button_text = button.text.strip()
-                if "Report" not in button_text and ("RD (100%)" in button_text or "Instant RD" in button_text):
+                bt = button.text.strip().upper()
+                if "REPORT" not in bt and ("RD" in bt or "INSTANT" in bt):
                     avail_buttons_elements.append(button)
             except StaleElementReferenceException:
-                logger.warning("Button became stale during re-location filtering, skipping...")
                 continue
             except Exception as e:
-                logger.warning(f"Error accessing button text during re-location filtering: {e}")
+                logger.warning(f"Error accessing button during re-location: {e}")
                 continue
         
         logger.info(f"Re-located {len(avail_buttons_elements)} availability buttons, looking for index {target_index}")
@@ -748,37 +748,58 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
         processed_torrents = set()
     
     try:
-        # Find both red (RD 100%) and green (Instant RD) buttons more robustly
-        # Try both class-based and text-based search
-        all_buttons_elements = driver.find_elements(By.XPATH, "//button[contains(@class, 'bg-red-900/30') or contains(@class, 'bg-green-900/30') or contains(., 'RD')]")
-        logger.info(f"Total availability buttons found: {len(all_buttons_elements)}")
+        # Find ALL buttons on the page for maximum robustness and diagnostic logging
+        all_elements = driver.find_elements(By.TAG_NAME, "button")
+        logger.info(f"Total <button> elements found on page: {len(all_elements)}")
         
         # Filter buttons that indicate availability
         valid_buttons_elements = []
         filtered_button_samples = []
-        for button in all_buttons_elements:
+        
+        for button in all_elements:
             try:
+                # Include hidden text and icons
                 button_text = button.text.strip()
-                # "RD (100%)" is usually red, "Instant RD" is usually green
-                if "Report" not in button_text and ("RD (100%)" in button_text or "Instant RD" in button_text):
-                    valid_buttons_elements.append(button)
+                button_class = button.get_attribute("class") or ""
+                
+                # Check for "RD" or "Instant" in text (case-insensitive) OR specific classes
+                # DMM uses bg-red-900/30, bg-green-900/30, etc.
+                is_availability = any(x in button_text.upper() for x in ["RD", "INSTANT"])
+                is_report = "REPORT" in button_text.upper()
+                
+                # Diagnostic logging for anything that looks like an RD button
+                if is_availability:
+                    logger.debug(f"Detected potential availability button: text='{button_text}', class='{button_class}'")
+                
+                if is_availability and not is_report:
+                    # We want "RD (100%)" or "Instant RD"
+                    # But also be flexible for "Instant RD" with icons
+                    if "RD" in button_text.upper() or "INSTANT" in button_text.upper():
+                        valid_buttons_elements.append(button)
                 else:
-                    # Collect samples of filtered buttons for debugging
-                    if len(filtered_button_samples) < 10:  # Log up to 10 filtered buttons
-                        filtered_button_samples.append(button_text)
+                    if len(filtered_button_samples) < 10 and (is_availability or "CAST" in button_text.upper()):
+                        filtered_button_samples.append(f"'{button_text}' (class: {button_class})")
             except StaleElementReferenceException:
-                logger.warning("Button became stale during filtering, skipping...")
                 continue
             except Exception as e:
-                logger.warning(f"Error accessing button text during filtering: {e}")
+                logger.warning(f"Error accessing button during filtering: {e}")
                 continue
         
-        logger.info(f"Found {len(valid_buttons_elements)} availability button(s) with 'RD (100%)' or 'Instant RD' without 'Report'. Verifying titles.")
+        logger.info(f"Found {len(valid_buttons_elements)} availability button(s) after filtering. Verifying titles.")
+        
+        if len(valid_buttons_elements) == 0:
+            logger.warning("No availability buttons found. Detailed diagnostics:")
+            # Log first 5 buttons found just to see what's on the page
+            for i, b in enumerate(all_elements[:10]):
+                try:
+                    logger.info(f"Diagnostic button {i}: text='{b.text}', class='{b.get_attribute('class')}'")
+                except:
+                    pass
         
         # Log samples of filtered buttons for debugging, especially when searching for episodes
         if episode_id and len(valid_buttons_elements) == 0 and filtered_button_samples:
-            logger.info(f"All {len(all_buttons_elements)} red/green buttons were filtered out. Sample button texts: {filtered_button_samples[:10]}")
-            logger.info(f"This likely means the buttons don't contain 'RD (100%)' or 'Instant RD' text. Episode being searched: {episode_id}")
+            logger.info(f"All {len(all_elements)} red/green buttons were filtered out. Sample button texts: {filtered_button_samples[:10]}")
+            logger.info(f"This likely means the buttons don't contain 'RD' or 'INSTANT' text. Episode being searched: {episode_id}")
         
         # Add a small delay to let the page stabilize after "Show More Results" clicks
         time.sleep(1)
@@ -801,9 +822,10 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
                     logger.debug(f"Availability button {i} contains 'Report' - skipping")
                     continue
                
-                # Double-check that this is actually an RD (100%) or Instant RD button
-                if "RD (100%)" not in button_text and "Instant RD" not in button_text:
-                    logger.info(f"Red button {i} does not contain 'RD (100%)' - text: '{button_text}'. Skipping.")
+                # Double-check that this is actually an RD or Instant button (case-insensitive)
+                bt_upper = button_text.upper()
+                if "RD" not in bt_upper and "INSTANT" not in bt_upper:
+                    logger.info(f"Button {i} does not look like an availability button - text: '{button_text}'. Skipping.")
                     continue
                
                 logger.info(f"Checking availability button {i} with text: '{button_text}'...")
