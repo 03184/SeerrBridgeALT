@@ -152,6 +152,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     libdrm2 \
     libxrandr2 \
+    xz-utils \
     && \
     # Step 2: Install MariaDB (idempotent setup)
     printf '#!/bin/sh\nexit 101' > /usr/sbin/policy-rc.d && \
