@@ -810,7 +810,13 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
                     # Try to find the title element, with retry on stale reference
                     try:
                         logger.info(f"Attempting to find title element for availability button {i}...")
-                        availability_button_title_element = availability_button_element.find_element(By.XPATH, ".//ancestor::div[contains(@class, 'border-2')]//h2")
+                        # Make XPath more robust: find ancestor that contains an h2, then find that h2
+                        try:
+                            availability_button_title_element = availability_button_element.find_element(By.XPATH, ".//ancestor::div[.//h2][1]//h2")
+                        except NoSuchElementException:
+                            # Fallback to the old specific one if the robust one fails for some reason
+                            availability_button_title_element = availability_button_element.find_element(By.XPATH, ".//ancestor::div[contains(@class, 'border')]//h2")
+                        
                         availability_button_title_text = availability_button_title_element.text.strip()
                         logger.info(f"Successfully found title for availability button {i}: '{availability_button_title_text}'")
                     except StaleElementReferenceException:
@@ -819,7 +825,11 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
                         if availability_button_element is None:
                             logger.warning(f"Could not re-locate availability button {i} for title extraction. Skipping.")
                             continue
-                        availability_button_title_element = availability_button_element.find_element(By.XPATH, ".//ancestor::div[contains(@class, 'border-2')]//h2")
+                        # Use robust XPath here too
+                        try:
+                            availability_button_title_element = availability_button_element.find_element(By.XPATH, ".//ancestor::div[.//h2][1]//h2")
+                        except NoSuchElementException:
+                            availability_button_title_element = availability_button_element.find_element(By.XPATH, ".//ancestor::div[contains(@class, 'border')]//h2")
                         availability_button_title_text = availability_button_title_element.text.strip()
                     # Use original title first, clean it for comparison
                     availability_button_title_cleaned = clean_title(availability_button_title_text.split('(')[0].strip(), target_lang='en')
@@ -911,8 +921,12 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
                         # 2. Size Filter Check
                         try:
                             # Extract size from the result box text
-                            # The box_text usually contains title, resolution, size, etc.
-                            box_element = availability_button_element.find_element(By.XPATH, ".//ancestor::div[contains(@class, 'border-2')]")
+                            # The box_element usually contains title, resolution, size, etc.
+                            try:
+                                box_element = availability_button_element.find_element(By.XPATH, ".//ancestor::div[.//h2][1]")
+                            except NoSuchElementException:
+                                box_element = availability_button_element.find_element(By.XPATH, ".//ancestor::div[contains(@class, 'border')]")
+                            
                             box_text = box_element.text.strip()
                             
                             # Use our new parse_size utility
