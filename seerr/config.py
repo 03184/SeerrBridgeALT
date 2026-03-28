@@ -97,11 +97,12 @@ def load_config_from_env():
         OVERSEERR_API_BASE_URL = OVERSEERR_BASE if OVERSEERR_BASE else None
         HEADLESS_MODE = os.getenv('HEADLESS_MODE', 'true').lower() == 'true'
         
-        # Stricter default regex that blocks URLs, multi-audio (Tamil, Telugu, etc.), and requires specific quality/tags
+        # exclusionary default regex that blocks URLs, multi-audio/non-English, and low quality
         # (?!.*[a-z0-9]+\.[a-z]{2,}) filters common URL patterns
-        # (?!.*(Tamil|Telugu|Hindi|Kannada|Malayalam|Dual|Multi)) filters non-English multi audio
-        # (?=.*(1080p|720p)) requires HD
-        DEFAULT_REGEX = r'^(?!.*[a-z0-9]+\.[a-z]{2,})(?!.*[【】\u0400-\u04FF\[esp\]])(?!.*(Tamil|Telugu|Hindi|Kannada|Malayalam|Dual|Multi))(?=.*(1080p|720p|WEB))(?=.*(ENGLISH|ENG|English|eng)).*'
+        # (?!.*(Tamil|Telugu|Hindi|Kannada|Malayalam|RUS|FR|GER|ITA|SPA|Dual|Multi|Audio)) filters non-English/multi
+        # (?!.*(HDRip|CAM|HDCAM|TS)) filters low quality
+        # (?=.*(1080p|720p|WEB)) requires HD/WEB
+        DEFAULT_REGEX = r'^(?!.*[a-z0-9]+\.[a-z]{2,})(?!.*[【】\u0400-\u04FF\[esp\]])(?!.*(Tamil|Telugu|Hindi|Kannada|Malayalam|RUS|FR|GER|ITA|SPA|Dual|Multi|Audio))(?!.*(HDRip|CAM|HDCAM|TS))(?=.*(1080p|720p|WEB)).*'
         TORRENT_FILTER_REGEX = os.getenv('TORRENT_FILTER_REGEX', DEFAULT_REGEX)
         
         # Clean quotes if they exist from .env loading
@@ -144,8 +145,8 @@ def load_config(override=False):
     ENABLE_AUTOMATIC_BACKGROUND_TASK = os.getenv("ENABLE_AUTOMATIC_BACKGROUND_TASK", "false").lower() == "true"
     ENABLE_SHOW_SUBSCRIPTION_TASK = os.getenv("ENABLE_SHOW_SUBSCRIPTION_TASK", "false").lower() == "true"
     
-    # Stricter default regex for load_config too
-    DEFAULT_REGEX = r'^(?!.*[a-z0-9]+\.[a-z]{2,})(?!.*[【】\u0400-\u04FF\[esp\]])(?!.*(Tamil|Telugu|Hindi|Kannada|Malayalam|Dual|Multi))(?=.*(1080p|720p|WEB))(?=.*(ENGLISH|ENG|English|eng)).*'
+    # exclusionary default regex for load_config too
+    DEFAULT_REGEX = r'^(?!.*[a-z0-9]+\.[a-z]{2,})(?!.*[【】\u0400-\u04FF\[esp\]])(?!.*(Tamil|Telugu|Hindi|Kannada|Malayalam|RUS|FR|GER|ITA|SPA|Dual|Multi|Audio))(?!.*(HDRip|CAM|HDCAM|TS))(?=.*(1080p|720p|WEB)).*'
     TORRENT_FILTER_REGEX = os.getenv("TORRENT_FILTER_REGEX", DEFAULT_REGEX)
     
     # Clean quotes if they exist from .env loading
