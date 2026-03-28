@@ -699,14 +699,14 @@ def relocate_red_buttons(driver, target_index):
         # Wait a bit for the page to stabilize
         time.sleep(1)
         
-        # Re-find all red buttons
-        all_red_buttons_elements = driver.find_elements(By.XPATH, "//button[contains(@class, 'bg-red-900/30')]")
-        red_buttons_elements = []
-        for button in all_red_buttons_elements:
+        # Re-find all availability buttons (red or green)
+        all_avail_buttons_elements = driver.find_elements(By.XPATH, "//button[contains(., 'RD')]")
+        avail_buttons_elements = []
+        for button in all_avail_buttons_elements:
             try:
                 button_text = button.text.strip()
-                if "Report" not in button_text and "RD (100%)" in button_text:
-                    red_buttons_elements.append(button)
+                if "Report" not in button_text and ("RD (100%)" in button_text or "Instant RD" in button_text):
+                    avail_buttons_elements.append(button)
             except StaleElementReferenceException:
                 logger.warning("Button became stale during re-location filtering, skipping...")
                 continue
@@ -714,10 +714,10 @@ def relocate_red_buttons(driver, target_index):
                 logger.warning(f"Error accessing button text during re-location filtering: {e}")
                 continue
         
-        logger.info(f"Re-located {len(red_buttons_elements)} red buttons, looking for index {target_index}")
+        logger.info(f"Re-located {len(avail_buttons_elements)} availability buttons, looking for index {target_index}")
         
-        if target_index <= len(red_buttons_elements):
-            return red_buttons_elements[target_index-1]
+        if target_index <= len(avail_buttons_elements):
+            return avail_buttons_elements[target_index-1]
         return None
     except Exception as e:
         logger.warning(f"Error re-locating red buttons: {e}")
@@ -748,9 +748,10 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
         processed_torrents = set()
     
     try:
-        # Find both red (RD 100%) and green (Instant RD) buttons
-        all_buttons_elements = driver.find_elements(By.XPATH, "//button[contains(@class, 'bg-red-900/30') or contains(@class, 'bg-green-900/30')]")
-        logger.info(f"Total red/green buttons found: {len(all_buttons_elements)}")
+        # Find both red (RD 100%) and green (Instant RD) buttons more robustly
+        # Try both class-based and text-based search
+        all_buttons_elements = driver.find_elements(By.XPATH, "//button[contains(@class, 'bg-red-900/30') or contains(@class, 'bg-green-900/30') or contains(., 'RD')]")
+        logger.info(f"Total availability buttons found: {len(all_buttons_elements)}")
         
         # Filter buttons that indicate availability
         valid_buttons_elements = []
