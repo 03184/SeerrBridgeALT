@@ -225,6 +225,32 @@ def clean_title(title, target_lang='en'):
     return cleaned_title.lower()
 
 
+def parse_size(size_str: str) -> float:
+    """
+    Parse a size string (e.g., '1.5 GB', '800 MB', '0.1 TB') and return the value in GB.
+    Returns 0.0 if parsing fails.
+    """
+    if not size_str:
+        return 0.0
+    
+    try:
+        # Match number and unit (GB, MB, TB)
+        match = re.search(r'([\d.]+)\s*(GB|MB|TB)', size_str, re.IGNORECASE)
+        if not match:
+            return 0.0
+        
+        value = float(match.group(1))
+        unit = match.group(2).upper()
+        
+        if unit == 'MB':
+            return value / 1024.0
+        elif unit == 'TB':
+            return value * 1024.0
+        return value  # Already in GB
+    except (ValueError, IndexError):
+        return 0.0
+
+
 def normalize_title_for_library_search(title, episode_id=None):
     """
     Normalize a title for DMM library search: no punctuation, single spaces, lowercase.

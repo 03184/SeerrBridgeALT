@@ -62,7 +62,7 @@ def validate_size_values(movie_size, episode_size):
     # Valid movie size values based on DMM settings page
     valid_movie_sizes = [0, 1, 3, 5, 15, 30, 60]
     # Valid episode size values based on DMM settings page  
-    valid_episode_sizes = [0, 0.1, 0.3, 0.5, 1, 3, 5]
+    valid_episode_sizes = [0, 0.1, 0.3, 0.5, 0.8, 1, 3, 5]
     
     # Convert to appropriate types and validate
     try:

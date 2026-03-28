@@ -1491,10 +1491,8 @@ def process_individual_episodes_fallback(driver, movie_title, season_num, normal
                     EC.presence_of_element_located((By.ID, "query"))
                 )
                 episode_filter = f"S{season_num:02d}{episode_id}"  # e.g., "S03E01"
-                if TORRENT_FILTER_REGEX:
-                    full_filter = f"{TORRENT_FILTER_REGEX} {episode_filter}"
-                else:
-                    full_filter = episode_filter
+                # Use only episode filter in UI; Python-side regex will handle the rest
+                full_filter = episode_filter
                 
                 # Use type_slowly for reliable filter application (same as subscription check)
                 from seerr.background_tasks import type_slowly

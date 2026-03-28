@@ -731,7 +731,7 @@ async def jellyseer_webhook(request: Request, background_tasks: BackgroundTasks)
                     )
         
         if not success:
-            raise HTTPException(status_code=500, detail="Failed to add request to queue - queue is full")
+            raise HTTPException(status_code=503, detail="Failed to add request to queue - queue is full")
         
         return {
             "status": "success", 

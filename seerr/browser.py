@@ -332,8 +332,11 @@ async def initialize_browser():
                     )
                     if TORRENT_FILTER_REGEX is not None:
                         default_filter_input.clear() # Clear any existing filter
-                        default_filter_input.send_keys(TORRENT_FILTER_REGEX)
-                        logger.info(f"Inserted regex into 'Default torrents filter' input box: {TORRENT_FILTER_REGEX}")
+                        # Use a simpler filter for DMM UI to ensure results are returned
+                        # The complex regex will be applied in Python code
+                        simple_ui_filter = "1080p 720p"
+                        default_filter_input.send_keys(simple_ui_filter)
+                        logger.info(f"Inserted simple filter into DMM UI: {simple_ui_filter} (Full regex will be applied in Python)")
                     else:
                         logger.info("TORRENT_FILTER_REGEX is not set. Skipping insertion into 'Default torrents filter' box.")
                     # Assume settings are auto-saved; no explicit save button
@@ -894,28 +897,43 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
                     if episode_id:
                         logger.info(f"Availability button {i} matching details - Title: '{availability_button_title_text}', title_ratio: {title_match_ratio:.1f}%, title_match: {title_matched}, season_match: {season_matched}, episode_match: {episode_matched}")
                     
-                    # If we're looking for complete season packs only, check if this is an individual episode
-                    if complete_season_pack_only and is_tv_show:
-                        # Check for episode patterns like E01, E1, Episode 1, etc.
-                        episode_patterns = [
-                            r'[sS]\d+[eE]\d+',  # S02E01, s2e3, etc.
-                            r'episode\s+\d+',  # Episode 1, Episode 25, etc.
-                            r'ep\s+\d+',  # Ep 1, Ep 25, etc.
-                            r'[eE]\d+',  # E01, E1, E25, etc.
-                        ]
-                        
-                        is_individual_episode = False
-                        for ep_pattern in episode_patterns:
-                            if re.search(ep_pattern, availability_button_title_text):
-                                is_individual_episode = True
-                                logger.info(f"Found individual episode pattern in torrent '{availability_button_title_text}' - rejecting for complete season pack search")
-                                break
-                        
-                        if is_individual_episode:
-                            logger.info(f"Skipping individual episode '{availability_button_title_text}' - only looking for complete season packs")
-                            continue
-                    
+                    # --- NEW: Python-side Regex and Size filtering ---
                     if title_matched and year_matched and (not is_tv_show or (season_matched and episode_matched)):
+                        # 1. Regex Filter Check (Python-side)
+                        if TORRENT_FILTER_REGEX:
+                            try:
+                                if not re.search(TORRENT_FILTER_REGEX, availability_button_title_text):
+                                    logger.info(f"Torrent '{availability_button_title_text}' rejected by Python-side TORRENT_FILTER_REGEX")
+                                    continue
+                            except re.error as e:
+                                logger.error(f"Invalid TORRENT_FILTER_REGEX: {e}")
+                        
+                        # 2. Size Filter Check
+                        try:
+                            # Extract size from the result box text
+                            # The box_text usually contains title, resolution, size, etc.
+                            box_element = availability_button_element.find_element(By.XPATH, ".//ancestor::div[contains(@class, 'border-2')]")
+                            box_text = box_element.text.strip()
+                            
+                            # Use our new parse_size utility
+                            from seerr.utils import parse_size
+                            torrent_size_gb = parse_size(box_text)
+                            
+                            if torrent_size_gb > 0:
+                                max_allowed_gb = MAX_MOVIE_SIZE if not is_tv_show else MAX_EPISODE_SIZE
+                                # If max_allowed_gb is 0, it means 'Biggest available' (unlimited)
+                                if max_allowed_gb and max_allowed_gb > 0:
+                                    if torrent_size_gb > max_allowed_gb:
+                                        logger.info(f"Torrent '{availability_button_title_text}' rejected due to size: {torrent_size_gb:.2f} GB > {max_allowed_gb} GB")
+                                        continue
+                                    else:
+                                        logger.info(f"Torrent '{availability_button_title_text}' size accepted: {torrent_size_gb:.2f} GB <= {max_allowed_gb} GB")
+                            else:
+                                logger.warning(f"Could not extract size for torrent: '{availability_button_title_text}' - continuing anyway")
+                        except Exception as e:
+                            logger.warning(f"Error during Python-side size filtering: {e}")
+                        
+                        # If we reached here, all Python-side filters passed
                         logger.info(f"Found a match on availability button {i} - {availability_button_title_cleaned} with RD/Instant RD. Marking as confirmed.")
                         confirmation_flag = True
                         # Add this torrent to processed set to avoid duplicate processing
