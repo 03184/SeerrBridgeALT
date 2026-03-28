@@ -126,19 +126,38 @@ RUN echo "Verifying logs API routes in build output..." && \
 # ==============================================================================
 FROM python:3.10-slim
 
-# Install MariaDB (MySQL-compatible), Node.js, and all runtime dependencies
+# Install system dependencies
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Step 1: Install core utilities and setup repositories
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # MariaDB server (MySQL-compatible)
-    mariadb-server \
-    mariadb-client \
-    # Node.js runtime
     curl \
+    ca-certificates \
     gnupg \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
-    # Runtime dependencies for Python/Chrome
     wget \
     unzip \
+    jq \
+    && rm -rf /var/lib/apt/lists/*
+
+# Step 2: Install MariaDB server and client
+# We create the run directory first to avoid issues during installation
+RUN mkdir -p /var/run/mysqld && \
+    mkdir -p /var/lib/mysql && \
+    chown -R mysql:mysql /var/run/mysqld /var/lib/mysql && \
+    chmod 755 /var/run/mysqld /var/lib/mysql && \
+    apt-get update && apt-get install -y --no-install-recommends \
+    mariadb-server \
+    mariadb-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Step 3: Install Node.js runtime (v20.x)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends \
+    nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Step 4: Install runtime dependencies for Python, Chrome, and system services
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libnss3 \
     libxss1 \
     libasound2 \
@@ -153,9 +172,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libdrm2 \
     libxrandr2 \
     ca-certificates \
-    jq \
     supervisor \
-    # Cleanup
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 

@@ -605,8 +605,8 @@ async def jellyseer_webhook(request: Request, background_tasks: BackgroundTasks)
         media_id = get_media_id_from_request_id(request_id)
         
         if media_id is None:
-            logger.error(f"Failed to get media_id for request_id {request_id}")
-            raise HTTPException(status_code=500, detail=f"Failed to get media_id for request_id {request_id}")
+            logger.error(f"Webhook Error: Failed to get Overseerr media_id for request_id {request_id}. This usually means the Overseerr API key or URL is incorrect, or the request ID is invalid.")
+            raise HTTPException(status_code=500, detail=f"Failed to find media record in Overseerr for request {request_id}")
         
         # Add to appropriate queue based on media type
         if media_type == 'movie':
@@ -744,8 +744,11 @@ async def jellyseer_webhook(request: Request, background_tasks: BackgroundTasks)
         }
         
     except Exception as e:
-        logger.error(f"Error processing webhook: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Critical Webhook Error: {str(e)}")
+        # Log stack trace for better debugging
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Internal server error processing webhook: {str(e)}")
 
 @app.post("/reload-env")
 async def reload_environment():

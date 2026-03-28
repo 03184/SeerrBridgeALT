@@ -161,9 +161,9 @@ def test_dmm_credentials(client_id, client_secret, access_token, refresh_token, 
             add_progress(test_id, progress_msg, "info")
         driver.execute_script(f"""
             localStorage.setItem('rd:accessToken', '{access_token}');
-            localStorage.setItem('rd:clientId', '"{client_id}"');
-            localStorage.setItem('rd:clientSecret', '"{client_secret}"');
-            localStorage.setItem('rd:refreshToken', '"{refresh_token}"');
+            localStorage.setItem('rd:clientId', '{client_id}');
+            localStorage.setItem('rd:clientSecret', '{client_secret}');
+            localStorage.setItem('rd:refreshToken', '{refresh_token}');
         """)
         
         # Refresh the page to apply the local storage values

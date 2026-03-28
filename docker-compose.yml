@@ -5,7 +5,8 @@ services:
   # Uses pre-built image from GitHub Container Registry
   # ==============================================================================
   seerrbridge:
-    image: ghcr.io/woahai321/seerrbridge:latest
+    # image: ghcr.io/woahai321/seerrbridge:latest
+    build: .
     container_name: seerrbridge
     restart: unless-stopped
     environment:

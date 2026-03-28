@@ -1160,8 +1160,8 @@ const validateAccessToken = (token) => {
         return 'Access Token value is empty'
       }
       // Validate the token value format (alphanumeric, typically long)
-      if (!/^[A-Za-z0-9]{20,}$/.test(parsed.value.trim())) {
-        return 'Access Token value format is invalid (should be alphanumeric, at least 20 characters)'
+      if (parsed.value.trim().length < 20) {
+        return 'Access Token value is too short (should be at least 20 characters)'
       }
       return ''
     }
@@ -1171,8 +1171,8 @@ const validateAccessToken = (token) => {
   
   // Validate as plain string token
   const cleanToken = token.trim().replace(/^["']|["']$/g, '') // Remove surrounding quotes if present
-  if (!/^[A-Za-z0-9]{20,}$/.test(cleanToken)) {
-    return 'Access Token format is invalid (should be alphanumeric, at least 20 characters)'
+  if (cleanToken.length < 20) {
+    return 'Access Token format is invalid (should be at least 20 characters)'
   }
   
   return ''
@@ -1187,8 +1187,8 @@ const validateClientId = (clientId) => {
   const cleanId = clientId.trim().replace(/^["']|["']$/g, '')
   
   // Client ID should be alphanumeric, typically shorter
-  if (!/^[A-Za-z0-9]{8,}$/.test(cleanId)) {
-    return 'Client ID format is invalid (should be alphanumeric, at least 8 characters)'
+  if (cleanId.length < 8) {
+    return 'Client ID is too short (should be at least 8 characters)'
   }
   
   return ''
@@ -1203,8 +1203,8 @@ const validateClientSecret = (clientSecret) => {
   const cleanSecret = clientSecret.trim().replace(/^["']|["']$/g, '')
   
   // Client Secret should be alphanumeric/hexadecimal, typically longer
-  if (!/^[A-Za-z0-9]{16,}$/.test(cleanSecret)) {
-    return 'Client Secret format is invalid (should be alphanumeric, at least 16 characters)'
+  if (cleanSecret.length < 16) {
+    return 'Client Secret is too short (should be at least 16 characters)'
   }
   
   return ''
@@ -1219,8 +1219,8 @@ const validateRefreshToken = (refreshToken) => {
   const cleanToken = refreshToken.trim().replace(/^["']|["']$/g, '')
   
   // Refresh Token should be alphanumeric, typically very long
-  if (!/^[A-Za-z0-9]{32,}$/.test(cleanToken)) {
-    return 'Refresh Token format is invalid (should be alphanumeric, at least 32 characters)'
+  if (cleanToken.length < 32) {
+    return 'Refresh Token is too short (should be at least 32 characters)'
   }
   
   return ''

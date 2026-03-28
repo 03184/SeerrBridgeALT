@@ -31,9 +31,15 @@ log "Starting SeerrBridge Unified Container..."
 log "Database: ${DB_NAME} | User: ${DB_USER} | Host: ${DB_HOST}:${DB_PORT}"
 
 # ==============================================================================
-# Step 0: Restore data files if volume mount is empty
+# Step 0: Handle .env file and restore data
 # ==============================================================================
-log "Step 0/6: Checking data files..."
+log "Step 0/6: Checking data files and configuration..."
+
+# Symlink .env from data directory to root if it exists
+if [ -f "/app/data/.env" ]; then
+    log "Found .env in /app/data, symlinking to root..."
+    ln -sf /app/data/.env /app/.env
+fi
 
 # Check if unified.json exists in mounted data directory
 if [ ! -f "/app/data/unified.json" ]; then

@@ -1,9 +1,12 @@
 import { defineEventHandler } from 'h3'
-import { envFile } from '~/server/utils/env-file'
+import { readEnvFile } from '~/server/utils/env-file'
 import { setConfigInEnv } from '~/server/utils/env-config'
 
 export default defineEventHandler(async (event) => {
   try {
+    // Read from .env file directly for reliability
+    const envFileData = readEnvFile()
+    
     // Map environment variable names to config keys
     const envToConfigMap: Record<string, { key: string; type: string; description: string }> = {
       'RD_ACCESS_TOKEN': { key: 'rd_access_token', type: 'string', description: 'Real-Debrid Access Token' },
@@ -41,7 +44,8 @@ export default defineEventHandler(async (event) => {
     ]
 
     for (const envKey of requiredConfigs) {
-      const envValue = process.env[envKey]
+      // Check both process.env and the physical .env file
+      const envValue = process.env[envKey] || envFileData[envKey]
       if (envValue) {
         const mapping = envToConfigMap[envKey]
         if (mapping) {
@@ -89,7 +93,7 @@ export default defineEventHandler(async (event) => {
       'FAILED_ITEM_MAX_RETRY_DELAY_HOURS'
     ]
     for (const envKey of optionalConfigs) {
-      const envValue = process.env[envKey]
+      const envValue = process.env[envKey] || envFileData[envKey]
       if (envValue) {
         const mapping = envToConfigMap[envKey]
         if (mapping) {
@@ -144,6 +148,10 @@ export default defineEventHandler(async (event) => {
       // Mark setup as completed in .env
       setConfigInEnv('onboarding_completed', true)
       setConfigInEnv('setup_required', false)
+      
+      // Also set in process.env for immediate use in this process
+      process.env.ONBOARDING_COMPLETED = 'true'
+      process.env.SETUP_REQUIRED = 'false'
       
       return {
         success: true,

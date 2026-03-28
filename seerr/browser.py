@@ -745,18 +745,19 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
         processed_torrents = set()
     
     try:
-        all_red_buttons_elements = driver.find_elements(By.XPATH, "//button[contains(@class, 'bg-red-900/30')]")
-        logger.info(f"Total red buttons found: {len(all_red_buttons_elements)}")
+        # Find both red (RD 100%) and green (Instant RD) buttons
+        all_buttons_elements = driver.find_elements(By.XPATH, "//button[contains(@class, 'bg-red-900/30') or contains(@class, 'bg-green-900/30')]")
+        logger.info(f"Total red/green buttons found: {len(all_buttons_elements)}")
         
-        # Filter out "Report" buttons and buttons that don't contain "RD (100%)"
-        # Use a safer approach to avoid stale element issues
-        red_buttons_elements = []
+        # Filter buttons that indicate availability
+        valid_buttons_elements = []
         filtered_button_samples = []
-        for button in all_red_buttons_elements:
+        for button in all_buttons_elements:
             try:
                 button_text = button.text.strip()
-                if "Report" not in button_text and "RD (100%)" in button_text:
-                    red_buttons_elements.append(button)
+                # "RD (100%)" is usually red, "Instant RD" is usually green
+                if "Report" not in button_text and ("RD (100%)" in button_text or "Instant RD" in button_text):
+                    valid_buttons_elements.append(button)
                 else:
                     # Collect samples of filtered buttons for debugging
                     if len(filtered_button_samples) < 10:  # Log up to 10 filtered buttons
@@ -768,76 +769,77 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
                 logger.warning(f"Error accessing button text during filtering: {e}")
                 continue
         
-        logger.info(f"Found {len(red_buttons_elements)} red button(s) with 'RD (100%)' without 'Report'. Verifying titles.")
+        logger.info(f"Found {len(valid_buttons_elements)} availability button(s) with 'RD (100%)' or 'Instant RD' without 'Report'. Verifying titles.")
         
         # Log samples of filtered buttons for debugging, especially when searching for episodes
-        if episode_id and len(red_buttons_elements) == 0 and filtered_button_samples:
-            logger.info(f"All {len(all_red_buttons_elements)} red buttons were filtered out. Sample button texts: {filtered_button_samples[:10]}")
-            logger.info(f"This likely means the buttons don't contain 'RD (100%)' text. Episode being searched: {episode_id}")
+        if episode_id and len(valid_buttons_elements) == 0 and filtered_button_samples:
+            logger.info(f"All {len(all_buttons_elements)} red/green buttons were filtered out. Sample button texts: {filtered_button_samples[:10]}")
+            logger.info(f"This likely means the buttons don't contain 'RD (100%)' or 'Instant RD' text. Episode being searched: {episode_id}")
         
         # Add a small delay to let the page stabilize after "Show More Results" clicks
         time.sleep(1)
         
-        for i, red_button_element in enumerate(red_buttons_elements, start=1):
+        for i, availability_button_element in enumerate(valid_buttons_elements, start=1):
             try:
                 # Re-locate the button to avoid stale element issues
                 try:
-                    button_text = red_button_element.text.strip()
+                    button_text = availability_button_element.text.strip()
                 except StaleElementReferenceException:
-                    logger.info(f"Red button {i} became stale, re-locating...")
-                    red_button_element = relocate_red_buttons(driver, i)
-                    if red_button_element is None:
-                        logger.warning(f"Could not re-locate red button {i}. Skipping.")
+                    logger.info(f"Availability button {i} became stale, re-locating...")
+                    # For now, we reuse relocate_red_buttons but it might need updating if it specifically looks for red
+                    availability_button_element = relocate_red_buttons(driver, i)
+                    if availability_button_element is None:
+                        logger.warning(f"Could not re-locate availability button {i}. Skipping.")
                         continue
-                    button_text = red_button_element.text.strip()
+                    button_text = availability_button_element.text.strip()
                 
                 if "Report" in button_text:
-                    logger.debug(f"Red button {i} contains 'Report' - skipping")
+                    logger.debug(f"Availability button {i} contains 'Report' - skipping")
                     continue
                
-                # Double-check that this is actually an RD (100%) button
-                if "RD (100%)" not in button_text:
+                # Double-check that this is actually an RD (100%) or Instant RD button
+                if "RD (100%)" not in button_text and "Instant RD" not in button_text:
                     logger.info(f"Red button {i} does not contain 'RD (100%)' - text: '{button_text}'. Skipping.")
                     continue
                
-                logger.info(f"Checking red button {i} with text: '{button_text}'...")
+                logger.info(f"Checking availability button {i} with text: '{button_text}'...")
                 try:
                     # Try to find the title element, with retry on stale reference
                     try:
-                        logger.info(f"Attempting to find title element for red button {i}...")
-                        red_button_title_element = red_button_element.find_element(By.XPATH, ".//ancestor::div[contains(@class, 'border-2')]//h2")
-                        red_button_title_text = red_button_title_element.text.strip()
-                        logger.info(f"Successfully found title for red button {i}: '{red_button_title_text}'")
+                        logger.info(f"Attempting to find title element for availability button {i}...")
+                        availability_button_title_element = availability_button_element.find_element(By.XPATH, ".//ancestor::div[contains(@class, 'border-2')]//h2")
+                        availability_button_title_text = availability_button_title_element.text.strip()
+                        logger.info(f"Successfully found title for availability button {i}: '{availability_button_title_text}'")
                     except StaleElementReferenceException:
-                        logger.info(f"Title element for red button {i} became stale, re-locating...")
-                        red_button_element = relocate_red_buttons(driver, i)
-                        if red_button_element is None:
-                            logger.warning(f"Could not re-locate red button {i} for title extraction. Skipping.")
+                        logger.info(f"Title element for availability button {i} became stale, re-locating...")
+                        availability_button_element = relocate_red_buttons(driver, i)
+                        if availability_button_element is None:
+                            logger.warning(f"Could not re-locate availability button {i} for title extraction. Skipping.")
                             continue
-                        red_button_title_element = red_button_element.find_element(By.XPATH, ".//ancestor::div[contains(@class, 'border-2')]//h2")
-                        red_button_title_text = red_button_title_element.text.strip()
+                        availability_button_title_element = availability_button_element.find_element(By.XPATH, ".//ancestor::div[contains(@class, 'border-2')]//h2")
+                        availability_button_title_text = availability_button_title_element.text.strip()
                     # Use original title first, clean it for comparison
-                    red_button_title_cleaned = clean_title(red_button_title_text.split('(')[0].strip(), target_lang='en')
+                    availability_button_title_cleaned = clean_title(availability_button_title_text.split('(')[0].strip(), target_lang='en')
                     movie_title_cleaned = clean_title(movie_title.split('(')[0].strip(), target_lang='en')
                     # Extract year for comparison
-                    red_button_year = extract_year(red_button_title_text, ignore_resolution=True)
+                    availability_button_year = extract_year(availability_button_title_text, ignore_resolution=True)
                     expected_year = extract_year(movie_title)
-                    logger.info(f"Red button {i} title: {red_button_title_cleaned}, Expected movie title: {movie_title_cleaned}")
+                    logger.info(f"Availability button {i} title: {availability_button_title_cleaned}, Expected movie title: {movie_title_cleaned}")
                     
                     # Check if we've already processed this torrent
-                    if red_button_title_text in processed_torrents:
-                        logger.info(f"Skipping red button {i} - already processed torrent: {red_button_title_text}")
+                    if availability_button_title_text in processed_torrents:
+                        logger.info(f"Skipping availability button {i} - already processed torrent: {availability_button_title_text}")
                         continue
                     
                     # Fuzzy matching with a slightly lower threshold for robustness
-                    title_match_ratio = fuzz.partial_ratio(red_button_title_cleaned.lower(), movie_title_cleaned.lower())
+                    title_match_ratio = fuzz.partial_ratio(availability_button_title_cleaned.lower(), movie_title_cleaned.lower())
                     title_match_threshold = 65  # Lowered from 69 to allow more flexibility
                     
                     # If initial match fails, try matching with original title (handles cases where extraction failed)
                     if title_match_ratio < title_match_threshold:
                         # Try matching original torrent title directly (fuzz.partial_ratio can find matches in longer strings)
                         original_match_ratio = fuzz.partial_ratio(
-                            red_button_title_text.lower(), 
+                            availability_button_title_text.lower(), 
                             movie_title.split('(')[0].strip().lower()
                         )
                         if original_match_ratio > title_match_ratio:
@@ -848,10 +850,10 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
                     # Year comparison (skip for TV shows or if missing)
                     year_matched = True
                     if not is_tv_show and expected_year:
-                        if red_button_year is None:
+                        if availability_button_year is None:
                             year_matched = False  # Card has no year; don't accept for movie with known year
                         else:
-                            year_matched = abs(red_button_year - expected_year) <= 1
+                            year_matched = abs(availability_button_year - expected_year) <= 1
                     # Episode and season matching (for TV shows)
                     season_matched = False
                     episode_matched = True
@@ -859,16 +861,16 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
                         # Use improved season matching that handles ranges like S01-04
                         from seerr.utils import match_single_season
                         for requested_season in normalized_seasons:
-                            if match_single_season(red_button_title_text, requested_season):
+                            if match_single_season(availability_button_title_text, requested_season):
                                 season_matched = True
-                                logger.info(f"Season match found: {requested_season} matches torrent '{red_button_title_text}'")
+                                logger.info(f"Season match found: {requested_season} matches torrent '{availability_button_title_text}'")
                                 break
                         
                         if episode_id:
-                            episode_matched = episode_id.lower() in red_button_title_text.lower()
+                            episode_matched = episode_id.lower() in availability_button_title_text.lower()
                             # Log episode matching details
                             if episode_id:
-                                logger.info(f"Checking episode match for episode_id='{episode_id}' in title='{red_button_title_text}': match={episode_matched}")
+                                logger.info(f"Checking episode match for episode_id='{episode_id}' in title='{availability_button_title_text}': match={episode_matched}")
                             # If we're searching for a specific episode and it matches, we can auto-match the season
                             # since the filter already ensures season match (avoiding redundant checks)
                             if episode_matched and not season_matched:
@@ -877,7 +879,7 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
                                     try:
                                         season_from_episode = int(episode_id[1:episode_id.index('E')])
                                         # Check if the title contains the same season
-                                        if f"S{season_from_episode:02d}" in red_button_title_text or f"Season {season_from_episode}" in red_button_title_text:
+                                        if f"S{season_from_episode:02d}" in availability_button_title_text or f"Season {season_from_episode}" in availability_button_title_text:
                                             season_matched = True
                                             logger.info(f"Auto-matched season from episode_id: {episode_id}")
                                     except (ValueError, IndexError):
@@ -890,7 +892,7 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
                     
                     # Log matching details when searching for episodes
                     if episode_id:
-                        logger.info(f"Red button {i} matching details - Title: '{red_button_title_text}', title_ratio: {title_match_ratio:.1f}%, title_match: {title_matched}, season_match: {season_matched}, episode_match: {episode_matched}")
+                        logger.info(f"Availability button {i} matching details - Title: '{availability_button_title_text}', title_ratio: {title_match_ratio:.1f}%, title_match: {title_matched}, season_match: {season_matched}, episode_match: {episode_matched}")
                     
                     # If we're looking for complete season packs only, check if this is an individual episode
                     if complete_season_pack_only and is_tv_show:
@@ -904,37 +906,37 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
                         
                         is_individual_episode = False
                         for ep_pattern in episode_patterns:
-                            if re.search(ep_pattern, red_button_title_text):
+                            if re.search(ep_pattern, availability_button_title_text):
                                 is_individual_episode = True
-                                logger.info(f"Found individual episode pattern in torrent '{red_button_title_text}' - rejecting for complete season pack search")
+                                logger.info(f"Found individual episode pattern in torrent '{availability_button_title_text}' - rejecting for complete season pack search")
                                 break
                         
                         if is_individual_episode:
-                            logger.info(f"Skipping individual episode '{red_button_title_text}' - only looking for complete season packs")
+                            logger.info(f"Skipping individual episode '{availability_button_title_text}' - only looking for complete season packs")
                             continue
                     
                     if title_matched and year_matched and (not is_tv_show or (season_matched and episode_matched)):
-                        logger.info(f"Found a match on red button {i} - {red_button_title_cleaned} with RD (100%). Marking as confirmed.")
+                        logger.info(f"Found a match on availability button {i} - {availability_button_title_cleaned} with RD/Instant RD. Marking as confirmed.")
                         confirmation_flag = True
                         # Add this torrent to processed set to avoid duplicate processing
-                        processed_torrents.add(red_button_title_text)
+                        processed_torrents.add(availability_button_title_text)
                         if is_tv_show and season_matched and not episode_id:
                             # Add the matched season to confirmed seasons
                             for requested_season in normalized_seasons:
-                                if match_single_season(red_button_title_text, requested_season):
+                                if match_single_season(availability_button_title_text, requested_season):
                                     confirmed_seasons.add(requested_season)
                                     break
                         return confirmation_flag, confirmed_seasons  # Early exit on match
                     else:
-                        logger.warning(f"No match for red button {i}: Title - {red_button_title_cleaned}, Year - {red_button_year}, Episode - {episode_id}. Moving to next red button.")
+                        logger.warning(f"No match for availability button {i}: Title - {availability_button_title_cleaned}, Year - {availability_button_year}, Episode - {episode_id}. Moving to next button.")
                 except NoSuchElementException as e:
-                    logger.warning(f"Could not find title associated with red button {i}: {e}")
+                    logger.warning(f"Could not find title associated with availability button {i}: {e}")
                     continue
             except StaleElementReferenceException as e:
-                logger.warning(f"Stale element reference encountered for red button {i}: {e}. Skipping this button.")
+                logger.warning(f"Stale element reference encountered for availability button {i}: {e}. Skipping this button.")
                 continue
     except NoSuchElementException:
-        logger.info("No red buttons with 'RD (100%)' detected. Proceeding with optional fallback.")
+        logger.info("No buttons with 'RD (100%)' or 'Instant RD' detected. Proceeding with optional fallback.")
     return confirmation_flag, confirmed_seasons
 
 def check_torrent_in_dmm_library(driver, search_phrase, library_wait_sec=8):
