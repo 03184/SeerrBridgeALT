@@ -935,11 +935,16 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
                         # 1. Regex Filter Check (Python-side)
                         if TORRENT_FILTER_REGEX:
                             try:
-                                if not re.search(TORRENT_FILTER_REGEX, availability_button_title_text):
-                                    logger.info(f"Torrent '{availability_button_title_text}' rejected by Python-side TORRENT_FILTER_REGEX")
+                                match = re.search(TORRENT_FILTER_REGEX, availability_button_title_text)
+                                if not match:
+                                    logger.info(f"Torrent '{availability_button_title_text}' rejected by Python-side TORRENT_FILTER_REGEX: {TORRENT_FILTER_REGEX}")
                                     continue
-                            except re.error as e:
+                                else:
+                                    logger.info(f"Torrent '{availability_button_title_text}' matched regex filter. Proceeding.")
+                            except Exception as e:
                                 logger.error(f"Invalid TORRENT_FILTER_REGEX: {e}")
+                                # In case of regex error, we skip to be safe
+                                continue
                         
                         # 2. Size Filter Check
                         try:
