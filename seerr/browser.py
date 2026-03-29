@@ -233,9 +233,9 @@ async def initialize_browser():
                 # Inject Real-Debrid access token and other credentials into local storage
                 driver.execute_script(f"""
                     localStorage.setItem('rd:accessToken', '{RD_ACCESS_TOKEN}');
-                    localStorage.setItem('rd:clientId', '"{RD_CLIENT_ID}"');
-                    localStorage.setItem('rd:clientSecret', '"{RD_CLIENT_SECRET}"');
-                    localStorage.setItem('rd:refreshToken', '"{RD_REFRESH_TOKEN}"');
+                    localStorage.setItem('rd:clientId', '{RD_CLIENT_ID}');
+                    localStorage.setItem('rd:clientSecret', '{RD_CLIENT_SECRET}');
+                    localStorage.setItem('rd:refreshToken', '{RD_REFRESH_TOKEN}');
                 """)
                 logger.info("Set Real-Debrid credentials in local storage.")
                 # Refresh the page to apply the local storage values
@@ -763,9 +763,11 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
                 button_text = button.text.strip()
                 button_class = button.get_attribute("class") or ""
                 
-                # Check for "RD" or "Instant" in text (case-insensitive) OR specific classes
+                # Check for "RD" or "Instant" in text (case-insensitive) OR specific classes/icons
                 # DMM uses bg-red-900/30, bg-green-900/30, etc.
-                is_availability = any(x in button_text.upper() for x in ["RD", "INSTANT"])
+                # Also look for Real-Debrid icons (img with src containing real-debrid)
+                is_availability = any(x in button_text.upper() for x in ["RD", "INSTANT", "LIBRARY", "DEBRID"]) or \
+                                 len(button.find_elements(By.XPATH, ".//img[contains(@src, 'real-debrid')]")) > 0
                 is_report = "REPORT" in button_text.upper()
                 
                 # Diagnostic logging for anything that looks like an RD button
@@ -773,10 +775,8 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
                     logger.debug(f"Detected potential availability button: text='{button_text}', class='{button_class}'")
                 
                 if is_availability and not is_report:
-                    # We want "RD (100%)" or "Instant RD"
-                    # But also be flexible for "Instant RD" with icons
-                    if "RD" in button_text.upper() or "INSTANT" in button_text.upper():
-                        valid_buttons_elements.append(button)
+                    # We want "RD (100%)", "Instant RD", or buttons with RD icons
+                    valid_buttons_elements.append(button)
                 else:
                     if len(filtered_button_samples) < 10 and (is_availability or "CAST" in button_text.upper()):
                         filtered_button_samples.append(f"'{button_text}' (class: {button_class})")
@@ -990,12 +990,60 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
                         logger.info(f"Found a match on availability button {i} - {availability_button_title_cleaned} with RD/Instant RD. Clicking to add to Real-Debrid.")
                         
                         try:
-                            # Use JavaScript click for better reliability in headless mode
+                            # 1. Primary Click: The RD status button itself
+                            logger.info(f"Attempting primary click on availability button for '{availability_button_title_text}'")
                             driver.execute_script("arguments[0].click();", availability_button_element)
-                            time.sleep(2) # Wait for click to register
-                            logger.success(f"Successfully clicked availability button for '{availability_button_title_text}'")
+                            time.sleep(2)
+                            
+                            # 2. Secondary Click: The Torrent Title (often opens a detail view with a more reliable Add button)
+                            try:
+                                logger.info(f"Clicking title '{availability_button_title_text}' to ensure detail view is open.")
+                                driver.execute_script("arguments[0].click();", availability_button_title_element)
+                                time.sleep(2)
+                            except Exception as title_click_e:
+                                logger.debug(f"Title click failed (might already be open): {title_click_e}")
+
+                            # 3. Third Click: Look for explicit "Add" or "Real-Debrid" buttons in the newly opened/focused view
+                            try:
+                                logger.info("Searching for explicit 'Add to Library' or 'Real-Debrid' buttons...")
+                                tertiary_selectors = [
+                                    "//button[contains(., 'Add to Library')]",
+                                    "//button[contains(., 'Real-Debrid')]",
+                                    "//button[.//img[contains(@src, 'real-debrid')]]",
+                                    "//a[contains(., 'Add to Library')]",
+                                    "//a[contains(., 'Real-Debrid')]",
+                                    "//a[.//img[contains(@src, 'real-debrid')]]"
+                                ]
+                                for sel in tertiary_selectors:
+                                    btns = driver.find_elements(By.XPATH, sel)
+                                    for b in btns:
+                                        if b.is_displayed():
+                                            logger.info(f"Found explicit addition button: '{b.text or 'icon button'}'. Clicking it.")
+                                            driver.execute_script("arguments[0].click();", b)
+                                            time.sleep(2)
+                            except Exception as tert_e:
+                                logger.debug(f"Tertiary button check failed: {tert_e}")
+
+                            # 4. Fourth Click: Check for potential confirmation modals
+                            try:
+                                confirm_selectors = [
+                                    "//button[contains(text(), 'Confirm')]",
+                                    "//button[contains(text(), 'OK')]",
+                                    "//button[contains(text(), 'Yes')]"
+                                ]
+                                for selector in confirm_selectors:
+                                    confirms = driver.find_elements(By.XPATH, selector)
+                                    for cb in confirms:
+                                        if cb.is_displayed():
+                                            logger.info(f"Found confirmation button: '{cb.text}'. Clicking it.")
+                                            driver.execute_script("arguments[0].click();", cb)
+                                            time.sleep(1)
+                            except Exception as modal_e:
+                                logger.debug(f"No confirmation modal found: {modal_e}")
+
+                            logger.success(f"Successfully processed availability button for '{availability_button_title_text}'")
                         except Exception as e:
-                            logger.error(f"Failed to click availability button: {e}")
+                            logger.error(f"Failed to complete media addition: {e}")
                         
                         confirmation_flag = True
                         # Add this torrent to processed set to avoid duplicate processing
