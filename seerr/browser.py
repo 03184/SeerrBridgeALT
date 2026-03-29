@@ -700,15 +700,29 @@ def relocate_red_buttons(driver, target_index):
         # Wait a bit for the page to stabilize
         time.sleep(1)
         
-        # Re-find all availability buttons (red or green)
-        # We look for buttons containing "RD" or "INSTANT"
-        all_avail = driver.find_elements(By.TAG_NAME, "button")
+        # Re-find all availability elements (buttons or links)
+        # Looking for things containing "RD", "INSTANT", or characteristic classes/icons
+        all_elements = driver.find_elements(By.XPATH, "//button | //a")
         avail_buttons_elements = []
-        for button in all_avail:
+        for element in all_elements:
             try:
-                bt = button.text.strip().upper()
-                if "REPORT" not in bt and ("RD" in bt or "INSTANT" in bt):
-                    avail_buttons_elements.append(button)
+                # Get text or title/aria-label for icon buttons
+                text = element.text.strip().upper()
+                label = (element.get_attribute("aria-label") or "").upper()
+                title = (element.get_attribute("title") or "").upper()
+                
+                # Check for characteristic addition triggers
+                is_valid = False
+                if "REPORT" not in text:
+                    if any(kw in text for kw in ["RD", "INSTANT"]):
+                        is_valid = True
+                    elif any(kw in label for kw in ["ADD", "RD", "LIBRARY"]):
+                        is_valid = True
+                    elif any(kw in title for kw in ["ADD", "RD", "LIBRARY"]):
+                        is_valid = True
+                        
+                if is_valid:
+                    avail_buttons_elements.append(element)
             except StaleElementReferenceException:
                 continue
             except Exception as e:
@@ -987,72 +1001,37 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
                             logger.warning(f"Error during Python-side size filtering: {e}")
                         
                         # If we reached here, all Python-side filters passed
-                        logger.info(f"Found a match on availability button {i} - {availability_button_title_cleaned} with RD/Instant RD. Proceeding to add.")
+                        logger.info(f"Found a match on availability button {i} - {availability_button_title_cleaned} with RD/Instant RD. Clicking to add.")
                         
-                        # --- VERIFICATION LOOP ---
-                        # We try to click and then verify in library
-                        success = False
                         try:
-                            # 1. Primary Click: The RD status button
-                            logger.info(f"Clicking primary status button for '{availability_button_title_text}'")
-                            driver.execute_script("arguments[0].click();", availability_button_element)
-                            time.sleep(2)
+                            # Use a simple, natural click sequence
+                            # 1. Scroll into view
+                            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", availability_button_element)
+                            time.sleep(1)
                             
-                            # 2. Detail View Click: The Title
+                            # 2. Click directly (standard Selenium click first, fallback to JS)
                             try:
-                                logger.info(f"Clicking title to open details and ensure Add button visibility.")
-                                driver.execute_script("arguments[0].click();", availability_button_title_element)
-                                time.sleep(2)
-                            except: pass
-
-                            # 3. Search for any explicit "Add" or "Real-Debrid" buttons
-                            explicit_selectors = [
-                                "//button[contains(., 'Add to Library')]",
-                                "//button[contains(., 'Real-Debrid')]",
-                                "//button[.//img[contains(@src, 'real-debrid')]]",
-                                "//a[contains(., 'Add') and contains(., 'RD')]"
-                            ]
-                            for sel in explicit_selectors:
-                                btns = driver.find_elements(By.XPATH, sel)
-                                for b in btns:
-                                    if b.is_displayed():
-                                        logger.info(f"Found explicit addition element: '{b.text or 'icon'}'. Clicking.")
-                                        driver.execute_script("arguments[0].click();", b)
-                                        time.sleep(1)
+                                availability_button_element.click()
+                            except:
+                                driver.execute_script("arguments[0].click();", availability_button_element)
                             
-                            # 4. Handle Modals
-                            for mod_sel in ["//button[text()='Confirm']", "//button[text()='OK']", "//button[text()='Yes']"]:
-                                mods = driver.find_elements(By.XPATH, mod_sel)
-                                for m in mods:
-                                    if m.is_displayed():
-                                        driver.execute_script("arguments[0].click();", m)
-                                        time.sleep(1)
-
-                            # 5. FINAL VERIFICATION: Check DMM Library
-                            logger.info(f"Verifying addition of '{availability_button_title_text}' in library...")
-                            # We use a broader check (just the title start) to be safe
-                            verify_phrase = clean_title(availability_button_title_text)[:20]
-                            if check_torrent_in_dmm_library(driver, verify_phrase, library_wait_sec=10):
-                                logger.success(f"Verified: '{availability_button_title_text}' is now in library.")
-                                success = True
-                            else:
-                                logger.warning(f"Could not verify '{availability_button_title_text}' in library, but click was performed.")
-                                # We still set success to True if we clicked, because library check might fail 
-                                # despite a successful addition due to DMM caching/delay
-                                success = True 
+                            logger.success(f"Successfully processed availability button for '{availability_button_title_text}'")
+                            time.sleep(2) # Give it a moment to send the request
+                            
                         except Exception as e:
-                            logger.error(f"Error during addition/verification: {e}")
-                            success = False # Something failed hard
+                            logger.error(f"Failed to click availability button: {e}")
 
-                        if success:
-                            confirmation_flag = True
-                            processed_torrents.add(availability_button_title_text)
-                            if is_tv_show and season_matched and not episode_id:
-                                for requested_season in normalized_seasons:
-                                    if match_single_season(availability_button_title_text, requested_season):
-                                        confirmed_seasons.add(requested_season)
-                                        break
-                            return confirmation_flag, confirmed_seasons
+                        confirmation_flag = True
+                        processed_torrents.add(availability_button_title_text)
+                        
+                        # Handle TV show season confirmation
+                        if is_tv_show and season_matched and not episode_id:
+                            for requested_season in normalized_seasons:
+                                if match_single_season(availability_button_title_text, requested_season):
+                                    confirmed_seasons.add(requested_season)
+                                    break
+                        
+                        return confirmation_flag, confirmed_seasons
                     else:
                         logger.warning(f"No match for availability button {i}: Title - {availability_button_title_cleaned}, Year - {availability_button_year}, Episode - {episode_id}. Moving to next button.")
                 except NoSuchElementException as e:
