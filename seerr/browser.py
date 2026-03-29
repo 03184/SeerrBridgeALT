@@ -31,6 +31,7 @@ from seerr.config import (
     RD_CLIENT_SECRET,
     RD_REFRESH_TOKEN,
     TORRENT_FILTER_REGEX,
+    SYSTEM_JUNK_BLACKLIST,
     MAX_MOVIE_SIZE,
     MAX_EPISODE_SIZE,
     USE_DATABASE
@@ -933,7 +934,6 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
                     # --- NEW: Python-side Regex and Size filtering ---
                     if title_matched and year_matched and (not is_tv_show or (season_matched and episode_matched)):
                         # 0. System Junk Blacklist Check (Mandatory)
-                        from seerr.config import SYSTEM_JUNK_BLACKLIST
                         is_junk = False
                         for junk_pattern in SYSTEM_JUNK_BLACKLIST:
                             if re.search(junk_pattern, availability_button_title_text, re.IGNORECASE):

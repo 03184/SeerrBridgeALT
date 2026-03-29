@@ -108,6 +108,12 @@ def load_config_from_env():
         # Clean quotes if they exist from .env loading
         if TORRENT_FILTER_REGEX:
             TORRENT_FILTER_REGEX = TORRENT_FILTER_REGEX.strip("'\"")
+            # Unescape unicode and other backslash sequences if they exist
+            try:
+                # This converts literal \u0400 in .env to actual unicode char
+                TORRENT_FILTER_REGEX = TORRENT_FILTER_REGEX.encode('utf-8').decode('unicode_escape')
+            except Exception:
+                pass
         
         logger.info("Configuration loaded from .env file successfully")
         return True
@@ -148,6 +154,11 @@ def load_config(override=False):
     # Clean quotes if they exist from .env loading
     if TORRENT_FILTER_REGEX:
         TORRENT_FILTER_REGEX = TORRENT_FILTER_REGEX.strip("'\"")
+        # Unescape unicode and other backslash sequences
+        try:
+            TORRENT_FILTER_REGEX = TORRENT_FILTER_REGEX.encode('utf-8').decode('unicode_escape')
+        except Exception:
+            pass
     
     # SYSTEM_JUNK_BLACKLIST: Mandatory regexes to block junk regardless of user config
     # 1. URL/Branding (www.site.com, site.gs, etc.)
