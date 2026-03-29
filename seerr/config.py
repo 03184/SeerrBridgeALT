@@ -45,6 +45,12 @@ MAX_MOVIE_SIZE = None
 MAX_EPISODE_SIZE = None
 REFRESH_INTERVAL_MINUTES = 60.0
 DISCREPANCY_REPO_FILE = "logs/episode_discrepancies.json"
+SYSTEM_JUNK_BLACKLIST = [
+    r'[a-z0-9]+\.[a-z]{2,5}',           # Broad URL detector (site.gs, site.pro, etc.)
+    r'Tam|Tel|Hin|Kan|Mal|Multi|Dual|Рус|Ukr', # Non-English/Multi tags
+    r'HDRip|CAM|HDCAM|TS|TC|SCR|DVDScr',       # Low quality sources
+    r'【.*?】|\[esp\]'                          # Specific junk tags
+]
 
 # Database configuration
 DB_HOST = None
@@ -160,16 +166,6 @@ def load_config(override=False):
         except Exception:
             pass
     
-    # SYSTEM_JUNK_BLACKLIST: Mandatory regexes to block junk regardless of user config
-    # 1. URL/Branding (www.site.com, site.gs, etc.)
-    # 2. Multi-language/Dub tags (Tam, Tel, Hin, Multi, Audio, Dual)
-    # 3. Known bad qualities (HDRip, CAM, HDCAM, TS, TC, SCR)
-    SYSTEM_JUNK_BLACKLIST = [
-        r'[a-z0-9]+\.[a-z]{2,5}',           # Broad URL detector (site.gs, site.pro, etc.)
-        r'Tam|Tel|Hin|Kan|Mal|Multi|Dual|Рус|Ukr', # Non-English/Multi tags
-        r'HDRip|CAM|HDCAM|TS|TC|SCR|DVDScr',       # Low quality sources
-        r'【.*?】|\[esp\]'                          # Specific junk tags
-    ]
     
     # Load and validate size values
     raw_movie_size = os.getenv("MAX_MOVIE_SIZE")
