@@ -987,7 +987,16 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
                             logger.warning(f"Error during Python-side size filtering: {e}")
                         
                         # If we reached here, all Python-side filters passed
-                        logger.info(f"Found a match on availability button {i} - {availability_button_title_cleaned} with RD/Instant RD. Marking as confirmed.")
+                        logger.info(f"Found a match on availability button {i} - {availability_button_title_cleaned} with RD/Instant RD. Clicking to add to Real-Debrid.")
+                        
+                        try:
+                            # Use JavaScript click for better reliability in headless mode
+                            driver.execute_script("arguments[0].click();", availability_button_element)
+                            time.sleep(2) # Wait for click to register
+                            logger.success(f"Successfully clicked availability button for '{availability_button_title_text}'")
+                        except Exception as e:
+                            logger.error(f"Failed to click availability button: {e}")
+                        
                         confirmation_flag = True
                         # Add this torrent to processed set to avoid duplicate processing
                         processed_torrents.add(availability_button_title_text)
