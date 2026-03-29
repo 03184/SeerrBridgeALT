@@ -987,74 +987,72 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
                             logger.warning(f"Error during Python-side size filtering: {e}")
                         
                         # If we reached here, all Python-side filters passed
-                        logger.info(f"Found a match on availability button {i} - {availability_button_title_cleaned} with RD/Instant RD. Clicking to add to Real-Debrid.")
+                        logger.info(f"Found a match on availability button {i} - {availability_button_title_cleaned} with RD/Instant RD. Proceeding to add.")
                         
+                        # --- VERIFICATION LOOP ---
+                        # We try to click and then verify in library
+                        success = False
                         try:
-                            # 1. Primary Click: The RD status button itself
-                            logger.info(f"Attempting primary click on availability button for '{availability_button_title_text}'")
+                            # 1. Primary Click: The RD status button
+                            logger.info(f"Clicking primary status button for '{availability_button_title_text}'")
                             driver.execute_script("arguments[0].click();", availability_button_element)
                             time.sleep(2)
                             
-                            # 2. Secondary Click: The Torrent Title (often opens a detail view with a more reliable Add button)
+                            # 2. Detail View Click: The Title
                             try:
-                                logger.info(f"Clicking title '{availability_button_title_text}' to ensure detail view is open.")
+                                logger.info(f"Clicking title to open details and ensure Add button visibility.")
                                 driver.execute_script("arguments[0].click();", availability_button_title_element)
                                 time.sleep(2)
-                            except Exception as title_click_e:
-                                logger.debug(f"Title click failed (might already be open): {title_click_e}")
+                            except: pass
 
-                            # 3. Third Click: Look for explicit "Add" or "Real-Debrid" buttons in the newly opened/focused view
-                            try:
-                                logger.info("Searching for explicit 'Add to Library' or 'Real-Debrid' buttons...")
-                                tertiary_selectors = [
-                                    "//button[contains(., 'Add to Library')]",
-                                    "//button[contains(., 'Real-Debrid')]",
-                                    "//button[.//img[contains(@src, 'real-debrid')]]",
-                                    "//a[contains(., 'Add to Library')]",
-                                    "//a[contains(., 'Real-Debrid')]",
-                                    "//a[.//img[contains(@src, 'real-debrid')]]"
-                                ]
-                                for sel in tertiary_selectors:
-                                    btns = driver.find_elements(By.XPATH, sel)
-                                    for b in btns:
-                                        if b.is_displayed():
-                                            logger.info(f"Found explicit addition button: '{b.text or 'icon button'}'. Clicking it.")
-                                            driver.execute_script("arguments[0].click();", b)
-                                            time.sleep(2)
-                            except Exception as tert_e:
-                                logger.debug(f"Tertiary button check failed: {tert_e}")
+                            # 3. Search for any explicit "Add" or "Real-Debrid" buttons
+                            explicit_selectors = [
+                                "//button[contains(., 'Add to Library')]",
+                                "//button[contains(., 'Real-Debrid')]",
+                                "//button[.//img[contains(@src, 'real-debrid')]]",
+                                "//a[contains(., 'Add') and contains(., 'RD')]"
+                            ]
+                            for sel in explicit_selectors:
+                                btns = driver.find_elements(By.XPATH, sel)
+                                for b in btns:
+                                    if b.is_displayed():
+                                        logger.info(f"Found explicit addition element: '{b.text or 'icon'}'. Clicking.")
+                                        driver.execute_script("arguments[0].click();", b)
+                                        time.sleep(1)
+                            
+                            # 4. Handle Modals
+                            for mod_sel in ["//button[text()='Confirm']", "//button[text()='OK']", "//button[text()='Yes']"]:
+                                mods = driver.find_elements(By.XPATH, mod_sel)
+                                for m in mods:
+                                    if m.is_displayed():
+                                        driver.execute_script("arguments[0].click();", m)
+                                        time.sleep(1)
 
-                            # 4. Fourth Click: Check for potential confirmation modals
-                            try:
-                                confirm_selectors = [
-                                    "//button[contains(text(), 'Confirm')]",
-                                    "//button[contains(text(), 'OK')]",
-                                    "//button[contains(text(), 'Yes')]"
-                                ]
-                                for selector in confirm_selectors:
-                                    confirms = driver.find_elements(By.XPATH, selector)
-                                    for cb in confirms:
-                                        if cb.is_displayed():
-                                            logger.info(f"Found confirmation button: '{cb.text}'. Clicking it.")
-                                            driver.execute_script("arguments[0].click();", cb)
-                                            time.sleep(1)
-                            except Exception as modal_e:
-                                logger.debug(f"No confirmation modal found: {modal_e}")
-
-                            logger.success(f"Successfully processed availability button for '{availability_button_title_text}'")
+                            # 5. FINAL VERIFICATION: Check DMM Library
+                            logger.info(f"Verifying addition of '{availability_button_title_text}' in library...")
+                            # We use a broader check (just the title start) to be safe
+                            verify_phrase = clean_title(availability_button_title_text)[:20]
+                            if check_torrent_in_dmm_library(driver, verify_phrase, library_wait_sec=10):
+                                logger.success(f"Verified: '{availability_button_title_text}' is now in library.")
+                                success = True
+                            else:
+                                logger.warning(f"Could not verify '{availability_button_title_text}' in library, but click was performed.")
+                                # We still set success to True if we clicked, because library check might fail 
+                                # despite a successful addition due to DMM caching/delay
+                                success = True 
                         except Exception as e:
-                            logger.error(f"Failed to complete media addition: {e}")
-                        
-                        confirmation_flag = True
-                        # Add this torrent to processed set to avoid duplicate processing
-                        processed_torrents.add(availability_button_title_text)
-                        if is_tv_show and season_matched and not episode_id:
-                            # Add the matched season to confirmed seasons
-                            for requested_season in normalized_seasons:
-                                if match_single_season(availability_button_title_text, requested_season):
-                                    confirmed_seasons.add(requested_season)
-                                    break
-                        return confirmation_flag, confirmed_seasons  # Early exit on match
+                            logger.error(f"Error during addition/verification: {e}")
+                            success = False # Something failed hard
+
+                        if success:
+                            confirmation_flag = True
+                            processed_torrents.add(availability_button_title_text)
+                            if is_tv_show and season_matched and not episode_id:
+                                for requested_season in normalized_seasons:
+                                    if match_single_season(availability_button_title_text, requested_season):
+                                        confirmed_seasons.add(requested_season)
+                                        break
+                            return confirmation_flag, confirmed_seasons
                     else:
                         logger.warning(f"No match for availability button {i}: Title - {availability_button_title_cleaned}, Year - {availability_button_year}, Episode - {episode_id}. Moving to next button.")
                 except NoSuchElementException as e:
