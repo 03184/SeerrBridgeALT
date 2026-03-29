@@ -145,13 +145,20 @@ def load_config(override=False):
     ENABLE_AUTOMATIC_BACKGROUND_TASK = os.getenv("ENABLE_AUTOMATIC_BACKGROUND_TASK", "false").lower() == "true"
     ENABLE_SHOW_SUBSCRIPTION_TASK = os.getenv("ENABLE_SHOW_SUBSCRIPTION_TASK", "false").lower() == "true"
     
-    # exclusionary default regex for load_config too
-    DEFAULT_REGEX = r'^(?!.*[a-z0-9]+\.[a-z]{2,})(?!.*[【】\u0400-\u04FF\[esp\]])(?!.*(Tamil|Telugu|Hindi|Kannada|Malayalam|RUS|FR|GER|ITA|SPA|Dual|Multi|Audio))(?!.*(HDRip|CAM|HDCAM|TS))(?=.*(1080p|720p|WEB)).*'
-    TORRENT_FILTER_REGEX = os.getenv("TORRENT_FILTER_REGEX", DEFAULT_REGEX)
-    
     # Clean quotes if they exist from .env loading
     if TORRENT_FILTER_REGEX:
         TORRENT_FILTER_REGEX = TORRENT_FILTER_REGEX.strip("'\"")
+    
+    # SYSTEM_JUNK_BLACKLIST: Mandatory regexes to block junk regardless of user config
+    # 1. URL/Branding (www.site.com, site.gs, etc.)
+    # 2. Multi-language/Dub tags (Tam, Tel, Hin, Multi, Audio, Dual)
+    # 3. Known bad qualities (HDRip, CAM, HDCAM, TS, TC, SCR)
+    SYSTEM_JUNK_BLACKLIST = [
+        r'[a-z0-9]+\.[a-z]{2,5}',           # Broad URL detector (site.gs, site.pro, etc.)
+        r'Tam|Tel|Hin|Kan|Mal|Multi|Dual|Рус|Ukr', # Non-English/Multi tags
+        r'HDRip|CAM|HDCAM|TS|TC|SCR|DVDScr',       # Low quality sources
+        r'【.*?】|\[esp\]'                          # Specific junk tags
+    ]
     
     # Load and validate size values
     raw_movie_size = os.getenv("MAX_MOVIE_SIZE")

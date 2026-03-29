@@ -932,12 +932,23 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
                     
                     # --- NEW: Python-side Regex and Size filtering ---
                     if title_matched and year_matched and (not is_tv_show or (season_matched and episode_matched)):
-                        # 1. Regex Filter Check (Python-side)
+                        # 0. System Junk Blacklist Check (Mandatory)
+                        from seerr.config import SYSTEM_JUNK_BLACKLIST
+                        is_junk = False
+                        for junk_pattern in SYSTEM_JUNK_BLACKLIST:
+                            if re.search(junk_pattern, availability_button_title_text, re.IGNORECASE):
+                                logger.info(f"Torrent '{availability_button_title_text}' rejected by MANDATORY system blacklist: {junk_pattern}")
+                                is_junk = True
+                                break
+                        if is_junk:
+                            continue
+
+                        # 1. Regex Filter Check (Python-side / User defined)
                         if TORRENT_FILTER_REGEX:
                             try:
                                 match = re.search(TORRENT_FILTER_REGEX, availability_button_title_text)
                                 if not match:
-                                    logger.info(f"Torrent '{availability_button_title_text}' rejected by Python-side TORRENT_FILTER_REGEX: {TORRENT_FILTER_REGEX}")
+                                    logger.info(f"Torrent '{availability_button_title_text}' rejected by User-side TORRENT_FILTER_REGEX: {TORRENT_FILTER_REGEX}")
                                     continue
                                 else:
                                     logger.info(f"Torrent '{availability_button_title_text}' matched regex filter. Proceeding.")
