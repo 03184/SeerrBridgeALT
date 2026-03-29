@@ -145,14 +145,14 @@ def load_config(override=False):
     load_dotenv(dotenv_path=env_path, override=override, interpolate=False)
     
     # Load all configuration from environment variables
-    RD_ACCESS_TOKEN = os.getenv('RD_ACCESS_TOKEN')
-    RD_REFRESH_TOKEN = os.getenv('RD_REFRESH_TOKEN')
-    RD_CLIENT_ID = os.getenv('RD_CLIENT_ID')
-    RD_CLIENT_SECRET = os.getenv('RD_CLIENT_SECRET')
-    OVERSEERR_BASE = os.getenv('OVERSEERR_BASE', '')
+    RD_ACCESS_TOKEN = os.getenv('RD_ACCESS_TOKEN', '').strip("'\" ")
+    RD_REFRESH_TOKEN = os.getenv('RD_REFRESH_TOKEN', '').strip("'\" ")
+    RD_CLIENT_ID = os.getenv('RD_CLIENT_ID', '').strip("'\" ")
+    RD_CLIENT_SECRET = os.getenv('RD_CLIENT_SECRET', '').strip("'\" ")
+    OVERSEERR_BASE = os.getenv('OVERSEERR_BASE', '').strip("'\" ")
     OVERSEERR_API_BASE_URL = OVERSEERR_BASE if OVERSEERR_BASE else None
-    OVERSEERR_API_KEY = os.getenv('OVERSEERR_API_KEY')
-    TRAKT_API_KEY = os.getenv('TRAKT_API_KEY')
+    OVERSEERR_API_KEY = os.getenv('OVERSEERR_API_KEY', '').strip("'\" ")
+    TRAKT_API_KEY = os.getenv('TRAKT_API_KEY', '').strip("'\" ")
     HEADLESS_MODE = os.getenv("HEADLESS_MODE", "true").lower() == "true"
     ENABLE_AUTOMATIC_BACKGROUND_TASK = os.getenv("ENABLE_AUTOMATIC_BACKGROUND_TASK", "false").lower() == "true"
     ENABLE_SHOW_SUBSCRIPTION_TASK = os.getenv("ENABLE_SHOW_SUBSCRIPTION_TASK", "false").lower() == "true"

@@ -1491,8 +1491,10 @@ def process_individual_episodes_fallback(driver, movie_title, season_num, normal
                     EC.presence_of_element_located((By.ID, "query"))
                 )
                 episode_filter = f"S{season_num:02d}{episode_id}"  # e.g., "S03E01"
-                # Use only episode filter in UI; Python-side regex will handle the rest
-                full_filter = episode_filter
+                if TORRENT_FILTER_REGEX:
+                    full_filter = f"{TORRENT_FILTER_REGEX} {episode_filter}"
+                else:
+                    full_filter = episode_filter
                 
                 # Use type_slowly for reliable filter application (same as subscription check)
                 from seerr.background_tasks import type_slowly
@@ -3242,15 +3244,14 @@ def search_on_debrid(imdb_id, movie_title, media_type, driver, extra_data=None, 
                 if year is not None:
                     try:
                         year_regex = f"({year - 1}|{year}|{year + 1})"
-                        # Use only simple resolution and year filter in UI; 
-                        # Python-side regex will handle the complex filtering later
-                        full_filter = f"1080p 720p {year_regex}"
+                        base = (TORRENT_FILTER_REGEX or "").strip()
+                        full_filter = f"{base} {year_regex}".strip() if base else year_regex
                         filter_input = WebDriverWait(driver, 3).until(
                             EC.presence_of_element_located((By.ID, "query"))
                         )
                         from seerr.background_tasks import type_slowly
                         type_slowly(driver, filter_input, full_filter)
-                        logger.info(f"Applied simple movie year filter to UI: {full_filter}")
+                        logger.info(f"Applied movie year filter: {full_filter}")
                         time.sleep(1)
                     except (TimeoutException, NoSuchElementException) as e:
                         logger.warning(f"Could not apply movie year filter: {e}")
