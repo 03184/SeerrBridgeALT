@@ -18,9 +18,14 @@ if [ "$DB_TYPE" = "sqlite" ]; then
 fi
 
 while [ $WAITED -lt $MAX_WAIT ]; do
-    # Try to connect using mysqladmin or mysql command
-    if mysqladmin ping -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" --silent 2>/dev/null || \
-       mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" -e "SELECT 1" "$DB_NAME" >/dev/null 2>&1; then
+    # Try multiple ways to connect:
+    # 1. Local socket (most reliable for root inside container)
+    # 2. TCP localhost
+    # 3. TCP 127.0.0.1
+    if mysqladmin ping -u root -p"${MYSQL_ROOT_PASSWORD}" --silent 2>/dev/null || \
+       mysqladmin ping -h localhost -P "$DB_PORT" -u root -p"${MYSQL_ROOT_PASSWORD}" --silent 2>/dev/null || \
+       mysqladmin ping -h 127.0.0.1 -P "$DB_PORT" -u root -p"${MYSQL_ROOT_PASSWORD}" --silent 2>/dev/null || \
+       mysqladmin ping -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" --silent 2>/dev/null; then
         echo "[$(date +'%Y-%m-%d %H:%M:%S')] MySQL is ready!"
         exit 0
     fi

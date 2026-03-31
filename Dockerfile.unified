@@ -1,22 +1,18 @@
 # Unified Dockerfile for SeerrBridge
-# Includes: MySQL + Python Backend + Nuxt Frontend in a single container
+# Includes: MariaDB + Python Backend + Nuxt Frontend in a single container
 
 # ==============================================================================
 # Stage 1: Python Builder
-# ==============================================================================
 FROM python:3.10-slim AS python-builder
 
-# Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies with cache mount
 COPY requirements.txt .
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir --user -r requirements.txt
 
 # ==============================================================================
 # Stage 2: Node.js Builder (Frontend)
@@ -35,9 +31,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies with cache mount
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci --legacy-peer-deps --omit=dev
+# Install dependencies
+RUN npm ci --legacy-peer-deps --omit=dev
 
 # Copy source code
 COPY . .
@@ -129,7 +124,7 @@ FROM python:3.10-slim
 # Install system dependencies
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Step 1-4: Install all system dependencies in a single transaction to minimize layers and peak space
+# Step 1: Install system dependencies, MariaDB, and Node.js
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
@@ -153,26 +148,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libdrm2 \
     libxrandr2 \
     xz-utils \
+    mariadb-server \
+    mariadb-client \
     && \
-    # Step 2: Install MariaDB (idempotent setup)
-    printf '#!/bin/sh\nexit 101' > /usr/sbin/policy-rc.d && \
-    chmod +x /usr/sbin/policy-rc.d && \
-    echo "mariadb-server mariadb-server/check_disk_space boolean false" | debconf-set-selections && \
-    apt-get install -y --no-install-recommends mariadb-server mariadb-client && \
+    # Initialize MariaDB directory
     mkdir -p /var/run/mysqld /var/lib/mysql && \
     chown -R mysql:mysql /var/run/mysqld /var/lib/mysql && \
     chmod 755 /var/run/mysqld /var/lib/mysql && \
-    rm /usr/sbin/policy-rc.d && \
-    # Step 3: Install Node.js (via binary download to save space and avoid apt cache/dependencies)
+    # Install Node.js (via binary download)
     arch=$(uname -m) && \
     if [ "$arch" = "x86_64" ]; then NODE_ARCH="x64"; elif [ "$arch" = "aarch64" ]; then NODE_ARCH="arm64"; else NODE_ARCH="x64"; fi && \
     NODE_VERSION="v20.11.1" && \
     curl -fsSL "https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-linux-$NODE_ARCH.tar.xz" -o /tmp/node.tar.xz && \
     tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 --no-same-owner && \
     rm /tmp/node.tar.xz && \
-    # Step 4: Final cleanup in the same layer
+    # Cleanup
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /tmp/*
+    rm -rf /var/lib/apt/lists/* /tmp/*
 
 # Install browser and driver based on architecture
 RUN arch=$(uname -m) && \
@@ -275,7 +267,7 @@ COPY scripts/wait-for-mysql.sh /app/scripts/wait-for-mysql.sh
 COPY scripts/wait-for-frontend.sh /app/scripts/wait-for-frontend.sh
 COPY scripts/start-services-sequentially.sh /app/scripts/start-services-sequentially.sh
 COPY scripts/ensure-db-user.sh /app/scripts/ensure-db-user.sh
-RUN chmod +x /usr/local/bin/start-unified.sh /app/scripts/wait-for-mysql.sh /app/scripts/wait-for-frontend.sh /app/scripts/start-services-sequentially.sh /app/scripts/ensure-db-user.sh
+RUN chmod +x /usr/local/bin/start-unified.sh /app/scripts/wait-for-mysql.sh /app/scripts/wait-for-frontend.sh /app/scripts/start-services-sequentially.sh /app/scripts/ensure-db-user.sh /app/scripts/healthcheck.sh
 
 # Set environment variables
 ENV CHROME_BIN=/usr/bin/google-chrome
@@ -292,7 +284,7 @@ EXPOSE 3306 3777 8777 8778
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-    CMD curl -f http://localhost:8777/status && curl -f http://localhost:3777/api/health || exit 1
+    CMD /app/scripts/healthcheck.sh
 
 # Start unified container
 CMD ["/usr/local/bin/start-unified.sh"]

@@ -43,7 +43,7 @@ services:
       - ./logs:/app/logs  # Log files
       - ./data:/app/data  # Application data (includes .env file)
     healthcheck:
-      test: ["CMD", "sh", "-c", "curl -f http://localhost:8777/status && curl -f http://localhost:3777/api/health || exit 1"]
+      test: ["CMD", "/app/scripts/healthcheck.sh"]
       timeout: 10s
       retries: 5
       interval: 30s

@@ -108,7 +108,7 @@ def load_config_from_env():
         # (?!.*(Tamil|Telugu|Hindi|Kannada|Malayalam|RUS|FR|GER|ITA|SPA|Dual|Multi|Audio)) filters non-English/multi
         # (?!.*(HDRip|CAM|HDCAM|TS)) filters low quality
         # (?=.*(1080p|720p|WEB)) requires HD/WEB
-        DEFAULT_REGEX = r'^(?!.*[a-z0-9]+\.[a-z]{2,})(?!.*[【】\u0400-\u04FF\[esp\]])(?!.*(Tamil|Telugu|Hindi|Kannada|Malayalam|RUS|FR|GER|ITA|SPA|Dual|Multi|Audio))(?!.*(HDRip|CAM|HDCAM|TS))(?=.*(1080p|720p|WEB)).*'
+        DEFAULT_REGEX = r'^(?!.*[a-z0-9]+\.[a-z]{2,})(?!.*[【】\u0400-\u04FF\[esp\]])(?!.*(Tamil|Telugu|Hindi|Kannada|Malayalam|RUS|FR|GER|ITA|SPA|Dual|Multi|Audio))(?!.*(HDRip|CAM|HDCAM|TS|2160p|4K|4k|UHD|uhd|480p|360p|SD|sd))(?=.*(1080p|720p)).*'
         TORRENT_FILTER_REGEX = os.getenv('TORRENT_FILTER_REGEX', DEFAULT_REGEX)
         
         # Clean quotes if they exist from .env loading

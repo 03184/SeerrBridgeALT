@@ -6,7 +6,9 @@ services:
   # ==============================================================================
   seerrbridge:
     # image: ghcr.io/woahai321/seerrbridge:latest
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.unified
     container_name: seerrbridge
     restart: unless-stopped
     environment:
