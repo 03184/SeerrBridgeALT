@@ -3247,7 +3247,7 @@ def search_on_debrid(imdb_id, movie_title, media_type, driver, extra_data=None, 
                         base = (TORRENT_FILTER_REGEX or "").strip()
                         full_filter = f"{base}\\s{year_regex}".strip() if base else year_regex
                         filter_input = WebDriverWait(driver, 3).until(
-                            EC.presence_of_element_located((By.ID, "query"))
+                            EC.presence_of_element_located((By.CSS_SELECTOR, "input[placeholder*='filter']"))
                         )
                         from seerr.background_tasks import type_slowly
                         type_slowly(driver, filter_input, full_filter)
