@@ -231,7 +231,7 @@ async def initialize_browser():
             try:
                 # Inject Real-Debrid access token and other credentials into local storage
                 driver.execute_script(f"""
-                    localStorage.setItem('rd:accessToken', '{RD_ACCESS_TOKEN}');
+                    localStorage.setItem('rd:accessToken', '"{RD_ACCESS_TOKEN}"');
                     localStorage.setItem('rd:clientId', '"{RD_CLIENT_ID}"');
                     localStorage.setItem('rd:clientSecret', '"{RD_CLIENT_SECRET}"');
                     localStorage.setItem('rd:refreshToken', '"{RD_REFRESH_TOKEN}"');

@@ -642,7 +642,7 @@ def try_complete_season_pack(driver, movie_title, season_num, normalized_seasons
                         # Check RD status after clicking (within the result box)
                         try:
                             rd_button = WebDriverWait(driver, 5).until(
-                                lambda d: result_box.find_element(By.XPATH, ".//button[contains(text(), 'RD (')]")
+                                lambda d: result_box.find_element(By.XPATH, ".//button[contains(@class, 'bg-red-900/30') and contains(text(), 'RD (')]")
                             )
                             rd_button_text = rd_button.text
                             logger.info(f"RD button text after clicking in box {i}: {rd_button_text}")
@@ -1354,7 +1354,7 @@ def try_with_extras_pack(driver, movie_title, season_num, normalized_seasons):
                         # Check RD status after clicking (within the result box)
                         try:
                             rd_button = WebDriverWait(driver, 5).until(
-                                lambda d: result_box.find_element(By.XPATH, ".//button[contains(text(), 'RD (')]")
+                                lambda d: result_box.find_element(By.XPATH, ".//button[contains(@class, 'bg-red-900/30') and contains(text(), 'RD (')]")
                             )
                             rd_button_text = rd_button.text
                             logger.info(f"RD button text after clicking in box {i}: {rd_button_text}")
@@ -1630,7 +1630,7 @@ def process_individual_episodes_fallback(driver, movie_title, season_num, normal
                                     RD_STATUS_WAIT_SEC = int(os.environ.get("SEERR_RD_STATUS_WAIT_SEC", "25"))
                                     try:
                                         rd_button = WebDriverWait(driver, RD_STATUS_WAIT_SEC).until(
-                                            EC.presence_of_element_located((By.XPATH, ".//button[contains(text(), 'RD (')]"))
+                                            EC.presence_of_element_located((By.XPATH, ".//button[contains(@class, 'bg-red-900/30') and contains(text(), 'RD (')]"))
                                         )
                                         rd_button_text = rd_button.text
                                         if "RD (100%)" in rd_button_text:
@@ -3603,7 +3603,7 @@ def search_on_debrid(imdb_id, movie_title, media_type, driver, extra_data=None, 
                                             # Perform RD status checks after clicking the button
                                             try:
                                                 rd_button = WebDriverWait(driver, 5).until(
-                                                    EC.presence_of_element_located((By.XPATH, ".//button[contains(text(), 'RD (')]"))
+                                                    EC.presence_of_element_located((By.XPATH, ".//button[contains(@class, 'bg-red-900/30') and contains(text(), 'RD (')]"))
                                                 )
                                                 rd_button_text = rd_button.text
                                                 logger.info(f"RD button text after clicking: {rd_button_text}")
@@ -3640,7 +3640,7 @@ def search_on_debrid(imdb_id, movie_title, media_type, driver, extra_data=None, 
                                             # Perform RD status checks after clicking the button
                                             try:
                                                 rd_button = WebDriverWait(driver, 5).until(
-                                                    EC.presence_of_element_located((By.XPATH, ".//button[contains(text(), 'RD (')]"))
+                                                    EC.presence_of_element_located((By.XPATH, ".//button[contains(@class, 'bg-red-900/30') and contains(text(), 'RD (')]"))
                                                 )
                                                 rd_button_text = rd_button.text
                                                 logger.info(f"RD button text after clicking: {rd_button_text}")
@@ -4008,7 +4008,7 @@ def search_on_debrid(imdb_id, movie_title, media_type, driver, extra_data=None, 
                                         try:
                                             # Wait longer for the RD button status to change (15 seconds)
                                             rd_button = WebDriverWait(driver, 15).until(
-                                                EC.presence_of_element_located((By.XPATH, ".//button[contains(text(), 'RD (')]"))
+                                                EC.presence_of_element_located((By.XPATH, ".//button[contains(@class, 'bg-red-900/30') and contains(text(), 'RD (')]"))
                                             )
                                             rd_button_text = rd_button.text
                                             logger.info(f"RD button text after clicking (attempt {retry + 1}): {rd_button_text}")
