@@ -111,15 +111,8 @@ def load_config_from_env():
         DEFAULT_REGEX = r'^(?!.*[a-z0-9]+\.[a-z]{2,})(?!.*[【】\u0400-\u04FF\[esp\]])(?!.*(Tamil|Telugu|Hindi|Kannada|Malayalam|RUS|FR|GER|ITA|SPA|Dual|Multi|Audio))(?!.*(HDRip|CAM|HDCAM|TS|2160p|4K|4k|UHD|uhd|480p|360p|SD|sd))(?=.*(1080p|720p)).*'
         TORRENT_FILTER_REGEX = os.getenv('TORRENT_FILTER_REGEX', DEFAULT_REGEX)
         
-        # Clean quotes if they exist from .env loading
         if TORRENT_FILTER_REGEX:
             TORRENT_FILTER_REGEX = TORRENT_FILTER_REGEX.strip("'\"")
-            # Unescape unicode and other backslash sequences if they exist
-            try:
-                # This converts literal \u0400 in .env to actual unicode char
-                TORRENT_FILTER_REGEX = TORRENT_FILTER_REGEX.encode('utf-8').decode('unicode_escape')
-            except Exception:
-                pass
         
         logger.info("Configuration loaded from .env file successfully")
         return True

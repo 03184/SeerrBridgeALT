@@ -332,7 +332,7 @@ async def initialize_browser():
                     )
                     if TORRENT_FILTER_REGEX is not None:
                         default_filter_input.clear() # Clear any existing filter
-                        default_filter_input.send_keys(TORRENT_FILTER_REGEX)
+                        default_filter_input.send_keys(TORRENT_FILTER_REGEX + '\n')
                         logger.info(f"Inserted regex into 'Default torrents filter' input box: {TORRENT_FILTER_REGEX}")
                     else:
                         logger.info("TORRENT_FILTER_REGEX is not set. Skipping insertion into 'Default torrents filter' box.")

@@ -1492,7 +1492,7 @@ def process_individual_episodes_fallback(driver, movie_title, season_num, normal
                 )
                 episode_filter = f"S{season_num:02d}{episode_id}"  # e.g., "S03E01"
                 if TORRENT_FILTER_REGEX:
-                    full_filter = f"{TORRENT_FILTER_REGEX} {episode_filter}"
+                    full_filter = f"{TORRENT_FILTER_REGEX}\\s{episode_filter}"
                 else:
                     full_filter = episode_filter
                 
@@ -3245,7 +3245,7 @@ def search_on_debrid(imdb_id, movie_title, media_type, driver, extra_data=None, 
                     try:
                         year_regex = f"({year - 1}|{year}|{year + 1})"
                         base = (TORRENT_FILTER_REGEX or "").strip()
-                        full_filter = f"{base} {year_regex}".strip() if base else year_regex
+                        full_filter = f"{base}\\s{year_regex}".strip() if base else year_regex
                         filter_input = WebDriverWait(driver, 3).until(
                             EC.presence_of_element_located((By.ID, "query"))
                         )
