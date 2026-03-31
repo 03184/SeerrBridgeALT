@@ -1488,7 +1488,7 @@ def process_individual_episodes_fallback(driver, movie_title, season_num, normal
                 
                 # Clear and update the filter box with episode-specific filter
                 filter_input = WebDriverWait(driver, 3).until(
-                    EC.presence_of_element_located((By.ID, "query"))
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "input[placeholder*='filter']"))
                 )
                 episode_filter = f"S{season_num:02d}{episode_id}"  # e.g., "S03E01"
                 if TORRENT_FILTER_REGEX:
@@ -1496,13 +1496,19 @@ def process_individual_episodes_fallback(driver, movie_title, season_num, normal
                 else:
                     full_filter = episode_filter
                 
+                # Wrap in slashes for DMM explicit regex if using custom filtering
+                if TORRENT_FILTER_REGEX:
+                    full_filter_str = f"/{full_filter}/i"
+                else:
+                    full_filter_str = full_filter
+                    
                 # Use type_slowly for reliable filter application (same as subscription check)
                 from seerr.background_tasks import type_slowly
-                type_slowly(driver, filter_input, full_filter)
-                logger.info(f"Applied episode filter: {full_filter}")
+                type_slowly(driver, filter_input, full_filter_str)
+                logger.info(f"Applied episode filter: {full_filter_str}")
                 
                 # Wait for filter to update the results before clicking "Show More Results"
-                time.sleep(1)
+                time.sleep(3)
                 
                 # Click "Show more results" to expand filtered results
                 try:
@@ -3250,9 +3256,10 @@ def search_on_debrid(imdb_id, movie_title, media_type, driver, extra_data=None, 
                             EC.presence_of_element_located((By.CSS_SELECTOR, "input[placeholder*='filter']"))
                         )
                         from seerr.background_tasks import type_slowly
-                        type_slowly(driver, filter_input, full_filter)
-                        logger.info(f"Applied movie year filter: {full_filter}")
-                        time.sleep(1)
+                        full_filter_str = f"/{full_filter}/i"
+                        type_slowly(driver, filter_input, full_filter_str)
+                        logger.info(f"Applied movie year filter (wrapped in regex slashes): {full_filter_str}")
+                        time.sleep(3)
                     except (TimeoutException, NoSuchElementException) as e:
                         logger.warning(f"Could not apply movie year filter: {e}")
             
