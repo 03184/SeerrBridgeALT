@@ -154,11 +154,9 @@ def load_config(override=False):
     # Clean quotes if they exist from .env loading
     if TORRENT_FILTER_REGEX:
         TORRENT_FILTER_REGEX = TORRENT_FILTER_REGEX.strip("'\"")
-        # Unescape unicode and other backslash sequences
-        try:
-            TORRENT_FILTER_REGEX = TORRENT_FILTER_REGEX.encode('utf-8').decode('unicode_escape')
-        except Exception:
-            pass
+        # Note: Do NOT apply unicode_escape decoding here.
+        # It corrupts regex backslash sequences (\\s, \\[, etc.) and
+        # mangles Unicode range patterns like \\u0400-\\u04FF.
     
     
     # Load and validate size values
