@@ -149,6 +149,7 @@ def load_config(override=False):
     HEADLESS_MODE = os.getenv("HEADLESS_MODE", "true").lower() == "true"
     ENABLE_AUTOMATIC_BACKGROUND_TASK = os.getenv("ENABLE_AUTOMATIC_BACKGROUND_TASK", "false").lower() == "true"
     ENABLE_SHOW_SUBSCRIPTION_TASK = os.getenv("ENABLE_SHOW_SUBSCRIPTION_TASK", "false").lower() == "true"
+    TORRENT_FILTER_REGEX = os.getenv("TORRENT_FILTER_REGEX")
     
     # Clean quotes if they exist from .env loading
     if TORRENT_FILTER_REGEX:
