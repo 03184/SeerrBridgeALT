@@ -49,11 +49,8 @@ class EnvFileManager:
                     if (value.startswith('"') and value.endswith('"')) or \
                        (value.startswith("'") and value.endswith("'")):
                         value = value[1:-1]
-                        # Unescape: \\ becomes \, \" becomes "
-                        # Do this carefully to avoid double-unescaping
-                        value = value.replace('\\\\', '\u0000TEMP_BACKSLASH\u0000')  # Temporarily replace \\
-                        value = value.replace('\\"', '"')                            # Unescape quotes
-                        value = value.replace('\u0000TEMP_BACKSLASH\u0000', '\\')    # Restore backslashes
+                        # Only unescape quotes — backslashes are stored verbatim
+                        value = value.replace('\\"', '"')
                     
                     env[key] = value
         except Exception as e:
@@ -88,9 +85,10 @@ class EnvFileManager:
             
             # Always wrap JSON objects and values with special characters in quotes
             if is_json_object or ' ' in value_str or '=' in value_str or '#' in value_str:
-                # Escape quotes and backslashes for .env file format
-                # Do this carefully: escape backslashes first, then quotes
-                value_str = value_str.replace('\\', '\\\\').replace('"', '\\"')
+                # Escape quotes for .env file format but NOT backslashes.
+                # Backslashes in regex patterns are regex syntax, not escape sequences.
+                # Double-escaping them breaks the regex when it's read back.
+                value_str = value_str.replace('"', '\\"')
                 value_str = f'"{value_str}"'
             
             lines.append(f'{key}={value_str}')

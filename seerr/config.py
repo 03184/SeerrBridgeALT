@@ -154,9 +154,24 @@ def load_config(override=False):
     # Clean quotes if they exist from .env loading
     if TORRENT_FILTER_REGEX:
         TORRENT_FILTER_REGEX = TORRENT_FILTER_REGEX.strip("'\"")
-        # Note: Do NOT apply unicode_escape decoding here.
-        # It corrupts regex backslash sequences (\\s, \\[, etc.) and
-        # mangles Unicode range patterns like \\u0400-\\u04FF.
+        
+        # Fix double-escaped backslashes from dashboard config save.
+        # The env_file_manager writes \\ where it should write \,
+        # so \\s becomes \\\\s in the file, which dotenv reads as \\s.
+        # We need single backslashes for Python regex: \s, \[, \u0400, etc.
+        import re as _re
+        if '\\\\' in TORRENT_FILTER_REGEX:
+            TORRENT_FILTER_REGEX = TORRENT_FILTER_REGEX.replace('\\\\', '\\')
+            logger.info("Fixed double-escaped backslashes in TORRENT_FILTER_REGEX")
+        
+        # Validate the regex compiles
+        try:
+            _re.compile(TORRENT_FILTER_REGEX)
+            logger.info(f"TORRENT_FILTER_REGEX validated OK: {TORRENT_FILTER_REGEX[:80]}...")
+        except _re.error as e:
+            logger.error(f"TORRENT_FILTER_REGEX is invalid and will be IGNORED: {e}")
+            logger.error(f"  Value was: {TORRENT_FILTER_REGEX}")
+            TORRENT_FILTER_REGEX = None
     
     
     # Load and validate size values
