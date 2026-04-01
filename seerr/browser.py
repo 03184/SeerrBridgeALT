@@ -330,12 +330,11 @@ async def initialize_browser():
                     default_filter_input = WebDriverWait(driver, 3).until(
                         EC.presence_of_element_located((By.ID, "dmm-default-torrents-filter"))
                     )
-                    if TORRENT_FILTER_REGEX is not None:
-                        default_filter_input.clear() # Clear any existing filter
-                        default_filter_input.send_keys(TORRENT_FILTER_REGEX + '\n')
-                        logger.info(f"Inserted regex into 'Default torrents filter' input box: {TORRENT_FILTER_REGEX}")
-                    else:
-                        logger.info("TORRENT_FILTER_REGEX is not set. Skipping insertion into 'Default torrents filter' box.")
+                    # We no longer type TORRENT_FILTER_REGEX into DMM Global Settings.
+                    # DMM's global setting acts as a Blacklist, hiding anything that matches the regex.
+                    # The user's regex is a Whitelist, which we evaluate in Python instead.
+                    default_filter_input.clear() # Clear any existing broken filter
+                    logger.info("Cleared DMM Default torrents filter. Regex evaluation is now handled locally in Python.")
                     # Assume settings are auto-saved; no explicit save button
                     logger.info("Settings updated successfully.")
                 except (TimeoutException, NoSuchElementException, ElementClickInterceptedException) as ex:
@@ -493,6 +492,25 @@ def prioritize_buttons_in_box(result_box):
     global driver
     
     try:
+        # Evaluate TORRENT_FILTER_REGEX locally in Python before clicking anything
+        if TORRENT_FILTER_REGEX:
+            try:
+                title_element = result_box.find_element(By.XPATH, ".//h2")
+                title_text = title_element.text.strip()
+                import re
+                
+                # Check for match (use both match and search to be safe)
+                compiled_regex = re.compile(TORRENT_FILTER_REGEX, re.IGNORECASE)
+                if not compiled_regex.match(title_text) and not compiled_regex.search(title_text):
+                    logger.info(f"Regex mismatch: '{title_text}' skipped. (Did not match strict whitelist requirements)")
+                    return False
+                else:
+                    logger.info(f"Regex matched: '{title_text}' passed whitelist requirements.")
+            except StaleElementReferenceException:
+                pass
+            except Exception as regex_ex:
+                logger.debug(f"Could not extract title or evaluate Python Regex: {regex_ex}")
+
         # Wait for the button container to be present (div with class 'space-x-1 space-y-1')
         try:
             WebDriverWait(driver, 2).until(
