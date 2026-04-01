@@ -834,6 +834,19 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
                             continue
                         red_button_title_element = red_button_element.find_element(By.XPATH, ".//ancestor::div[contains(@class, 'border-2')]//h2")
                         red_button_title_text = red_button_title_element.text.strip()
+                    
+                    # Evaluate TORRENT_FILTER_REGEX for red buttons too
+                    if TORRENT_FILTER_REGEX:
+                        try:
+                            import re
+                            compiled_regex = re.compile(TORRENT_FILTER_REGEX, re.IGNORECASE)
+                            if not compiled_regex.match(red_button_title_text) and not compiled_regex.search(red_button_title_text):
+                                logger.info(f"Regex mismatch for red button {i}: '{red_button_title_text}' skipped. (Does not match whitelist requirements)")
+                                continue
+                            else:
+                                logger.info(f"Regex matched for red button {i}: '{red_button_title_text}' passed whitelist requirements.")
+                        except Exception as regex_ex:
+                            logger.debug(f"Could not evaluate Python Regex for red button: {regex_ex}")
                     # Use original title first, clean it for comparison
                     red_button_title_cleaned = clean_title(red_button_title_text.split('(')[0].strip(), target_lang='en')
                     movie_title_cleaned = clean_title(movie_title.split('(')[0].strip(), target_lang='en')
