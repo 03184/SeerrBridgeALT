@@ -156,18 +156,24 @@ def load_config(override=False):
         TORRENT_FILTER_REGEX = TORRENT_FILTER_REGEX.strip("'\"")
         
         # Fix double-escaped backslashes from dashboard config save.
-        # The env_file_manager writes \\ where it should write \,
-        # so \\s becomes \\\\s in the file, which dotenv reads as \\s.
-        # We need single backslashes for Python regex: \s, \[, \u0400, etc.
+        # The .env file may contain literal two-character sequences like
+        # backslash+backslash+s instead of backslash+s.
+        # We detect this by looking for common regex escapes that got doubled.
         import re as _re
-        if '\\\\' in TORRENT_FILTER_REGEX:
-            TORRENT_FILTER_REGEX = TORRENT_FILTER_REGEX.replace('\\\\', '\\')
+        TWO_BACKSLASHES = chr(92) + chr(92)  # Exactly two backslash characters
+        ONE_BACKSLASH = chr(92)               # Exactly one backslash character
+        if TWO_BACKSLASHES in TORRENT_FILTER_REGEX:
+            TORRENT_FILTER_REGEX = TORRENT_FILTER_REGEX.replace(TWO_BACKSLASHES, ONE_BACKSLASH)
             logger.info("Fixed double-escaped backslashes in TORRENT_FILTER_REGEX")
         
         # Validate the regex compiles
         try:
-            _re.compile(TORRENT_FILTER_REGEX)
-            logger.info(f"TORRENT_FILTER_REGEX validated OK: {TORRENT_FILTER_REGEX[:80]}...")
+            compiled = _re.compile(TORRENT_FILTER_REGEX, _re.IGNORECASE)
+            # Quick sanity test: a known-good title must pass
+            test_pass = bool(compiled.search("Movie.2025.1080p.BluRay.x264-RARBG"))
+            test_fail = not compiled.search("Movie.2025.1080p.DUAL.BluRay-Nogroup")
+            logger.info(f"TORRENT_FILTER_REGEX validated OK (sanity: pass={test_pass}, block={test_fail})")
+            logger.info(f"  Regex: {TORRENT_FILTER_REGEX[:100]}...")
         except _re.error as e:
             logger.error(f"TORRENT_FILTER_REGEX is invalid and will be IGNORED: {e}")
             logger.error(f"  Value was: {TORRENT_FILTER_REGEX}")

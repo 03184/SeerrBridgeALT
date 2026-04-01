@@ -323,10 +323,28 @@ async def initialize_browser():
                         select_obj.select_by_value(episode_size_value)
                         logger.info("Biggest Episode Size Selected as {} GB.".format(current_ep_size))
                     else:
-                        # Fallback to "Biggest available" (value="0") if the specified value is not available
-                        logger.warning(f"Episode size value '{episode_size_value}' not available. Available options: {available_options}. Using 'Biggest available' (0) as fallback.")
-                        select_obj.select_by_value("0")
-                        logger.info("Biggest Episode Size Selected as 'Biggest available' (0) as fallback.")
+                        # Fallback: pick the next larger available option instead of "biggest available"
+                        target = float(episode_size_value) if episode_size_value != "0" else 0
+                        numeric_options = sorted([float(o) for o in available_options if o != "0" and float(o) > 0])
+                        fallback = None
+                        for opt in numeric_options:
+                            if opt >= target:
+                                fallback = opt
+                                break
+                        if fallback is not None:
+                            fallback_str = str(int(fallback)) if fallback == int(fallback) else str(fallback)
+                            select_obj.select_by_value(fallback_str)
+                            logger.info(f"Episode size '{episode_size_value}' not in dropdown. Selected next available: {fallback_str} GB.")
+                        else:
+                            # All options are smaller than requested — pick the largest non-zero
+                            if numeric_options:
+                                largest = numeric_options[-1]
+                                largest_str = str(int(largest)) if largest == int(largest) else str(largest)
+                                select_obj.select_by_value(largest_str)
+                                logger.info(f"Episode size '{episode_size_value}' not in dropdown. Selected largest available: {largest_str} GB.")
+                            else:
+                                select_obj.select_by_value("0")
+                                logger.warning(f"Episode size '{episode_size_value}' not available. No numeric options found. Using 'Biggest available' (0) as fallback.")
                     # Locate the "Default torrents filter" input box and insert the regex
                     logger.info("Attempting to insert regex into 'Default torrents filter' box.")
                     default_filter_input = WebDriverWait(driver, 3).until(
