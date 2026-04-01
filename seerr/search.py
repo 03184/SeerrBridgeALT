@@ -15,7 +15,8 @@ from selenium.common.exceptions import StaleElementReferenceException, NoSuchEle
 from loguru import logger
 from fuzzywuzzy import fuzz
 
-from seerr.config import TORRENT_FILTER_REGEX, USE_DATABASE
+from seerr.config import USE_DATABASE
+import seerr.config as config  # Import module to access dynamically reloaded vars
 from seerr.database import get_db, LogEntry
 from seerr.db_logger import log_info, log_success, log_error
 from datetime import datetime
@@ -1491,13 +1492,15 @@ def process_individual_episodes_fallback(driver, movie_title, season_num, normal
                     EC.presence_of_element_located((By.CSS_SELECTOR, "input[placeholder*='filter']"))
                 )
                 episode_filter = f"S{season_num:02d}{episode_id}"  # e.g., "S03E01"
-                if TORRENT_FILTER_REGEX:
-                    full_filter = f"{TORRENT_FILTER_REGEX}\\s{episode_filter}"
+                current_regex = config.TORRENT_FILTER_REGEX
+                if current_regex:
+                    full_filter = f"{current_regex}\\s{episode_filter}"
+                    logger.info(f"Using full filter with regex: {full_filter}")
                 else:
                     full_filter = episode_filter
                 
                 # Wrap in slashes for DMM explicit regex if using custom filtering
-                if TORRENT_FILTER_REGEX:
+                if current_regex:
                     full_filter_str = f"/{full_filter}/i"
                 else:
                     full_filter_str = full_filter
@@ -3250,8 +3253,12 @@ def search_on_debrid(imdb_id, movie_title, media_type, driver, extra_data=None, 
                 if year is not None:
                     try:
                         year_regex = f"({year - 1}|{year}|{year + 1})"
-                        base = (TORRENT_FILTER_REGEX or "").strip()
-                        full_filter = f"{base}\\s{year_regex}".strip() if base else year_regex
+                        current_regex = config.TORRENT_FILTER_REGEX
+                        base = (current_regex or "").strip()
+                        if base and base.endswith(".*"):
+                            full_filter = f"{base}\\s{year_regex}".strip() if base else year_regex
+                        else:
+                            full_filter = f"{base}\\s{year_regex}".strip() if base else year_regex
                         filter_input = WebDriverWait(driver, 3).until(
                             EC.presence_of_element_located((By.CSS_SELECTOR, "input[placeholder*='filter']"))
                         )

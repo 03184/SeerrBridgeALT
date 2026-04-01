@@ -30,11 +30,11 @@ from seerr.config import (
     RD_CLIENT_ID,
     RD_CLIENT_SECRET,
     RD_REFRESH_TOKEN,
-    TORRENT_FILTER_REGEX,
     MAX_MOVIE_SIZE,
     MAX_EPISODE_SIZE,
     USE_DATABASE
 )
+import seerr.config as config  # Import module to access dynamically reloaded vars
 # Global driver variable to hold the Selenium WebDriver
 driver = None
 # Global library stats
@@ -284,10 +284,11 @@ async def initialize_browser():
                     logger.info(f"Available movie size options: {available_options}")
                     
                     # Validate and select the appropriate movie size
-                    movie_size_value = str(int(MAX_MOVIE_SIZE)) if MAX_MOVIE_SIZE is not None else "0"
+                    current_movie_size = config.MAX_MOVIE_SIZE
+                    movie_size_value = str(int(current_movie_size)) if current_movie_size is not None else "0"
                     if movie_size_value in available_options:
                         select_obj.select_by_value(movie_size_value)
-                        logger.info("Biggest Movie Size Selected as {} GB.".format(MAX_MOVIE_SIZE))
+                        logger.info("Biggest Movie Size Selected as {} GB.".format(current_movie_size))
                     else:
                         # Fallback to "Biggest available" (value="0") if the specified value is not available
                         logger.warning(f"Movie size value '{movie_size_value}' not available. Available options: {available_options}. Using 'Biggest available' (0) as fallback.")
@@ -307,19 +308,20 @@ async def initialize_browser():
                     
                     # Validate and select the appropriate episode size
                     # Handle both integer and float values properly
-                    if MAX_EPISODE_SIZE is not None:
-                        if MAX_EPISODE_SIZE == int(MAX_EPISODE_SIZE):
-                            # Integer value (e.g., 1, 3, 5)
-                            episode_size_value = str(int(MAX_EPISODE_SIZE))
+                    current_ep_size = config.MAX_EPISODE_SIZE
+                    if current_ep_size is not None:
+                        if current_ep_size == int(current_ep_size):
+                            # It's a whole number, e.g. 1.0 -> "1"
+                            episode_size_value = str(int(current_ep_size))
                         else:
-                            # Float value (e.g., 0.1, 0.3, 0.5)
-                            episode_size_value = str(MAX_EPISODE_SIZE)
+                            # It's a decimal, e.g. 0.5 -> "0.5"
+                            episode_size_value = str(current_ep_size)
                     else:
                         episode_size_value = "0"
                     
                     if episode_size_value in available_options:
                         select_obj.select_by_value(episode_size_value)
-                        logger.info("Biggest Episode Size Selected as {} GB.".format(MAX_EPISODE_SIZE))
+                        logger.info("Biggest Episode Size Selected as {} GB.".format(current_ep_size))
                     else:
                         # Fallback to "Biggest available" (value="0") if the specified value is not available
                         logger.warning(f"Episode size value '{episode_size_value}' not available. Available options: {available_options}. Using 'Biggest available' (0) as fallback.")
@@ -339,7 +341,7 @@ async def initialize_browser():
                     logger.info("Settings updated successfully.")
                 except (TimeoutException, NoSuchElementException, ElementClickInterceptedException) as ex:
                     logger.error(f"Error while interacting with the settings: {ex}")
-                    logger.warning("Continuing without applying custom settings (TORRENT_FILTER_REGEX, MAX_MOVIE_SIZE, MAX_EPISODE_SIZE)")
+                    logger.warning("Continuing without applying custom settings")
                 except Exception as ex:
                     logger.error(f"Unexpected error while configuring settings: {ex}")
                     logger.warning("Continuing without applying custom settings due to unexpected error")
@@ -493,14 +495,15 @@ def prioritize_buttons_in_box(result_box):
     
     try:
         # Evaluate TORRENT_FILTER_REGEX locally in Python before clicking anything
-        if TORRENT_FILTER_REGEX:
+        current_regex = config.TORRENT_FILTER_REGEX
+        if current_regex:
             try:
                 title_element = result_box.find_element(By.XPATH, ".//h2")
                 title_text = title_element.text.strip()
                 import re
                 
                 # Check for match (use both match and search to be safe)
-                compiled_regex = re.compile(TORRENT_FILTER_REGEX, re.IGNORECASE)
+                compiled_regex = re.compile(current_regex, re.IGNORECASE)
                 if not compiled_regex.match(title_text) and not compiled_regex.search(title_text):
                     logger.info(f"Regex mismatch: '{title_text}' skipped. (Did not match strict whitelist requirements)")
                     return False
@@ -836,10 +839,11 @@ def check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons
                         red_button_title_text = red_button_title_element.text.strip()
                     
                     # Evaluate TORRENT_FILTER_REGEX for red buttons too
-                    if TORRENT_FILTER_REGEX:
+                    current_regex = config.TORRENT_FILTER_REGEX
+                    if current_regex:
                         try:
                             import re
-                            compiled_regex = re.compile(TORRENT_FILTER_REGEX, re.IGNORECASE)
+                            compiled_regex = re.compile(current_regex, re.IGNORECASE)
                             if not compiled_regex.match(red_button_title_text) and not compiled_regex.search(red_button_title_text):
                                 logger.info(f"Regex mismatch for red button {i}: '{red_button_title_text}' skipped. (Does not match whitelist requirements)")
                                 continue
