@@ -155,28 +155,64 @@ def load_config(override=False):
     if TORRENT_FILTER_REGEX:
         TORRENT_FILTER_REGEX = TORRENT_FILTER_REGEX.strip("'\"")
         
-        # Fix double-escaped backslashes from dashboard config save.
-        # The .env file may contain literal two-character sequences like
-        # backslash+backslash+s instead of backslash+s.
-        # We detect this by looking for common regex escapes that got doubled.
         import re as _re
-        TWO_BACKSLASHES = chr(92) + chr(92)  # Exactly two backslash characters
-        ONE_BACKSLASH = chr(92)               # Exactly one backslash character
+        
+        # Fix double-escaped backslashes (from dashboard config save)
+        TWO_BACKSLASHES = chr(92) + chr(92)
+        ONE_BACKSLASH = chr(92)
         if TWO_BACKSLASHES in TORRENT_FILTER_REGEX:
             TORRENT_FILTER_REGEX = TORRENT_FILTER_REGEX.replace(TWO_BACKSLASHES, ONE_BACKSLASH)
             logger.info("Fixed double-escaped backslashes in TORRENT_FILTER_REGEX")
         
-        # Validate the regex compiles
+        # Fix the broken character class pattern from the default/old regex.
+        # The old pattern [【】\u0400-\u04FF\[esp\]] is broken in .env because:
+        #   - \u0400 becomes literal chars \,u,0,4,0,0 (not Unicode Ѐ)
+        #   - \[esp\] inside [...] matches individual chars including 'p'
+        #   - 'p' matches '1080p' in EVERY title, rejecting everything
+        # Replace with a safe alternation-based pattern.
+        broken_patterns = [
+            chr(92) + 'u0400-' + chr(92) + 'u04FF',  # literal \u0400-\u04FF
+            chr(92) + '[esp' + chr(92) + ']',          # literal \[esp\]
+        ]
+        has_broken = any(bp in TORRENT_FILTER_REGEX for bp in broken_patterns)
+        if has_broken:
+            logger.warning("Detected broken Unicode/character-class pattern in regex. Rebuilding...")
+            # Replace the entire broken character class with a working alternation
+            # Find and replace [【】\u0400-\u04FF\[esp\]] or similar
+            # Use a simple approach: just rebuild the regex from known-good components
+            TORRENT_FILTER_REGEX = (
+                r'^(?!.*(【|】|\[esp\]))'                                                  # Block CJK brackets and [esp] tags
+                r'(?=.*(1080p|720p))'                                                       # Require HD resolution
+                r'(?!.*(DUAL|MULTI|Multi\sAudio|Dual\sAudio|FRENCH|FR|GERMAN|GER'
+                r'|ITALIAN|ITA|SPANISH|SPA|RUSSIAN|RUS|HINDI|TAMIL|TELUGU'
+                r'|KANNADA|MALAYALAM|2160p|4K|4k|UHD|uhd|480p|360p|SD|sd'
+                r'|remux|CAM|TS|HDRip))'                                                    # Block non-English, low quality, 4K
+                r'(?=.*(MeGusta|Elite|NeoNoir|rarbg|PSA|YTS))'                              # Require approved release groups
+                r'.*'
+            )
+            logger.info("Rebuilt regex with working pattern")
+        
+        # Validate the regex compiles and passes sanity checks
         try:
             compiled = _re.compile(TORRENT_FILTER_REGEX, _re.IGNORECASE)
-            # Quick sanity test: a known-good title must pass
+            # Sanity tests
             test_pass = bool(compiled.search("Movie.2025.1080p.BluRay.x264-RARBG"))
-            test_fail = not compiled.search("Movie.2025.1080p.DUAL.BluRay-Nogroup")
-            logger.info(f"TORRENT_FILTER_REGEX validated OK (sanity: pass={test_pass}, block={test_fail})")
-            logger.info(f"  Regex: {TORRENT_FILTER_REGEX[:100]}...")
+            test_block_dual = not compiled.search("Movie.2025.1080p.DUAL.BluRay-RARBG")
+            test_block_nogroup = not compiled.search("Movie.2025.1080p.BluRay-Nogroup")
+            logger.info(f"TORRENT_FILTER_REGEX sanity: good_title={test_pass}, block_dual={test_block_dual}, block_nogroup={test_block_nogroup}")
+            if not test_pass:
+                logger.error("CRITICAL: Regex rejects known-good titles! Falling back to permissive regex.")
+                # Fallback: only block multi-language, require HD, require release group
+                TORRENT_FILTER_REGEX = (
+                    r'^(?=.*(1080p|720p))'
+                    r'(?!.*(DUAL|MULTI|FRENCH|FR|GERMAN|GER|ITALIAN|ITA|SPANISH|SPA|RUSSIAN|RUS))'
+                    r'(?=.*(MeGusta|Elite|NeoNoir|rarbg|PSA|YTS))'
+                    r'.*'
+                )
+                logger.info("Using fallback regex")
+            logger.info(f"  Final regex: {TORRENT_FILTER_REGEX[:120]}...")
         except _re.error as e:
             logger.error(f"TORRENT_FILTER_REGEX is invalid and will be IGNORED: {e}")
-            logger.error(f"  Value was: {TORRENT_FILTER_REGEX}")
             TORRENT_FILTER_REGEX = None
     
     
