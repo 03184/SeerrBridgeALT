@@ -1492,18 +1492,12 @@ def process_individual_episodes_fallback(driver, movie_title, season_num, normal
                     EC.presence_of_element_located((By.CSS_SELECTOR, "input[placeholder*='filter']"))
                 )
                 episode_filter = f"S{season_num:02d}{episode_id}"  # e.g., "S03E01"
-                current_regex = config.TORRENT_FILTER_REGEX
-                if current_regex:
-                    full_filter = f"{current_regex}\\s{episode_filter}"
-                    logger.info(f"Using full filter with regex: {full_filter}")
-                else:
-                    full_filter = episode_filter
                 
-                # Wrap in slashes for DMM explicit regex if using custom filtering
-                if current_regex:
-                    full_filter_str = f"/{full_filter}/i"
-                else:
-                    full_filter_str = full_filter
+                # Only use the episode identifier in DMM's page filter.
+                # TORRENT_FILTER_REGEX (quality/language whitelist) is evaluated
+                # in Python inside prioritize_buttons_in_box, NOT injected into DMM.
+                full_filter = episode_filter
+                full_filter_str = full_filter
                     
                 # Use type_slowly for reliable filter application (same as subscription check)
                 from seerr.background_tasks import type_slowly
@@ -3253,19 +3247,17 @@ def search_on_debrid(imdb_id, movie_title, media_type, driver, extra_data=None, 
                 if year is not None:
                     try:
                         year_regex = f"({year - 1}|{year}|{year + 1})"
-                        current_regex = config.TORRENT_FILTER_REGEX
-                        base = (current_regex or "").strip()
-                        if base and base.endswith(".*"):
-                            full_filter = f"{base}\\s{year_regex}".strip() if base else year_regex
-                        else:
-                            full_filter = f"{base}\\s{year_regex}".strip() if base else year_regex
+                        # Only use the year filter in DMM's page filter.
+                        # TORRENT_FILTER_REGEX (quality/language whitelist) is evaluated
+                        # in Python inside prioritize_buttons_in_box, NOT injected into DMM.
+                        full_filter = year_regex
                         filter_input = WebDriverWait(driver, 3).until(
                             EC.presence_of_element_located((By.CSS_SELECTOR, "input[placeholder*='filter']"))
                         )
                         from seerr.background_tasks import type_slowly
                         full_filter_str = f"/{full_filter}/i"
                         type_slowly(driver, filter_input, full_filter_str)
-                        logger.info(f"Applied movie year filter (wrapped in regex slashes): {full_filter_str}")
+                        logger.info(f"Applied movie year filter: {full_filter_str}")
                         time.sleep(3)
                     except (TimeoutException, NoSuchElementException) as e:
                         logger.warning(f"Could not apply movie year filter: {e}")
