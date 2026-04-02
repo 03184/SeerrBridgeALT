@@ -3826,6 +3826,36 @@ def search_on_debrid(imdb_id, movie_title, media_type, driver, extra_data=None, 
                         except TimeoutException:
                             logger.warning("Still no result boxes found after second attempt")
                             # result_boxes remains an empty list
+                    # Pre-scan: reorder result boxes to prioritize preferred release groups.
+                    # This avoids scanning 50+ boxes linearly when a PSA/RARBG/YTS release
+                    # exists further down the list.
+                    if result_boxes:
+                        import re as _re
+                        current_regex = config.TORRENT_FILTER_REGEX
+                        if current_regex:
+                            try:
+                                compiled_regex = _re.compile(current_regex, _re.IGNORECASE)
+                                preferred_indices = []
+                                other_indices = []
+                                for idx, box in enumerate(result_boxes):
+                                    try:
+                                        h2 = box.find_element(By.XPATH, ".//h2")
+                                        title = h2.text.strip()
+                                        if compiled_regex.search(title):
+                                            preferred_indices.append(idx)
+                                        else:
+                                            other_indices.append(idx)
+                                    except Exception:
+                                        other_indices.append(idx)
+                                
+                                if preferred_indices:
+                                    reordered = [result_boxes[i] for i in preferred_indices] + [result_boxes[i] for i in other_indices]
+                                    result_boxes = reordered
+                                    logger.info(f"Pre-scan: {len(preferred_indices)} preferred group matches found out of {len(preferred_indices) + len(other_indices)} boxes. Processing preferred first.")
+                                else:
+                                    logger.info(f"Pre-scan: No preferred group matches in {len(result_boxes)} boxes. Processing in original order.")
+                            except _re.error as e:
+                                logger.warning(f"Pre-scan regex error: {e}. Processing in original order.")
 
                     for i, result_box in enumerate(result_boxes, start=1):
                         # Check for cancellation before processing each box
