@@ -3241,26 +3241,10 @@ def search_on_debrid(imdb_id, movie_title, media_type, driver, extra_data=None, 
             confirmed_seasons = set()
             processed_torrents = set()
 
-            # For movies only: set DMM filter to release year ±1 so wrong-year torrents don't appear
-            if not is_tv_show:
-                year = extract_year(movie_title)
-                if year is not None:
-                    try:
-                        year_regex = f"({year - 1}|{year}|{year + 1})"
-                        # Only use the year filter in DMM's page filter.
-                        # TORRENT_FILTER_REGEX (quality/language whitelist) is evaluated
-                        # in Python inside prioritize_buttons_in_box, NOT injected into DMM.
-                        full_filter = year_regex
-                        filter_input = WebDriverWait(driver, 3).until(
-                            EC.presence_of_element_located((By.CSS_SELECTOR, "input[placeholder*='filter']"))
-                        )
-                        from seerr.background_tasks import type_slowly
-                        full_filter_str = f"/{full_filter}/i"
-                        type_slowly(driver, filter_input, full_filter_str)
-                        logger.info(f"Applied movie year filter: {full_filter_str}")
-                        time.sleep(3)
-                    except (TimeoutException, NoSuchElementException) as e:
-                        logger.warning(f"Could not apply movie year filter: {e}")
+            # Note: We no longer apply a year filter to DMM's page filter.
+            # Many torrent titles don't include the year (especially new releases),
+            # so filtering by year hides valid results. Title matching (below) already
+            # handles year verification, and the Python-side regex filter handles quality/language.
             
             # Step 2: Check if any red buttons (RD 100%) exist and verify the title for each
             confirmation_flag, confirmed_seasons = check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons, is_tv_show, processed_torrents=processed_torrents)
